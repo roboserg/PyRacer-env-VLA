@@ -3,6 +3,7 @@ import json
 import random
 from PIL import Image, ImageOps
 from torch.utils.data import Dataset
+from collections import Counter
 
 
 class RacingVLADataset(Dataset):
@@ -18,6 +19,43 @@ class RacingVLADataset(Dataset):
 
     def __len__(self):
         return len(self.data)
+
+    def print_stats(self):
+        """Calculates and prints statistics for the current dataset instance."""
+        print(f"Total dataset size: {len(self)} frames")
+        stats = {"accel": 0, "brake": 0, "left": 0, "right": 0, "any_action": 0}
+
+        # Track unique action combinations
+        action_sets = []
+
+        for item in self.data:
+            a = item["action"]
+            if a[0] > 0.5:
+                stats["accel"] += 1
+            if a[1] > 0.5:
+                stats["brake"] += 1
+            if a[2] > 0.5:
+                stats["left"] += 1
+            if a[3] > 0.5:
+                stats["right"] += 1
+            if any(v > 0.5 for v in a):
+                stats["any_action"] += 1
+
+            # Create a string representation for the action set
+            action_set_str = f"<FWD_{int(a[0]>0.5)}> <BRK_{int(a[1]>0.5)}> <LFT_{int(a[2]>0.5)}> <RGT_{int(a[3]>0.5)}>"
+            action_sets.append(action_set_str)
+
+        print("\nDataset Individual Action Stats:")
+        for k, v in stats.items():
+            pct = (v / len(self)) * 100
+            print(f"  {k:10}: {v:5} ({pct:.1f}%)")
+
+        print("\nDataset Action Set Distribution (Frequency of combinations):")
+        set_counts = Counter(action_sets)
+        for action_set, count in set_counts.most_common():
+            pct = (count / len(self)) * 100
+            print(f"  {action_set}: {count:5} ({pct:.1f}%)")
+        print()
 
     def __getitem__(self, idx):
         item = self.data[idx]
@@ -84,26 +122,26 @@ class RacingVLADataset(Dataset):
         )
         if not prompt_text.endswith(" "):
             prompt_text += " "
-            
+
         # 2. Get the full conversation
         # We reconstruct it manually to ensure the space is handled correctly
         full_text = prompt_text + action_str + self.tokenizer.eos_token
 
         # 3. Process both to ensure token alignment
         inputs = self.processor(
-            text=full_text, 
-            images=image, 
-            return_tensors="pt", 
-            do_resize=True, 
-            size={"longest_edge": 384}
+            text=full_text,
+            images=image,
+            return_tensors="pt",
+            do_resize=True,
+            size={"longest_edge": 384},
         )
-        
+
         prompt_inputs = self.processor(
-            text=prompt_text, 
-            images=image, 
-            return_tensors="pt", 
-            do_resize=True, 
-            size={"longest_edge": 384}
+            text=prompt_text,
+            images=image,
+            return_tensors="pt",
+            do_resize=True,
+            size={"longest_edge": 384},
         )
 
         input_ids = inputs["input_ids"].squeeze(0)
@@ -117,16 +155,16 @@ class RacingVLADataset(Dataset):
         # --- DEBUG X-RAY ---
         if idx == 0:
             active_labels = labels[labels != -100]
-            print(f"\n" + "="*50)
+            print(f"\n" + "=" * 50)
             print(f"[DEBUG] Action String:  {action_str}")
             print(f"[DEBUG] Decoded Labels: {repr(self.tokenizer.decode(active_labels))}")
             print(f"[DEBUG] Label IDs:      {active_labels.tolist()}")
             print(f"[DEBUG] Prompt Len:     {prompt_len}")
             print(f"[DEBUG] Total Len:      {len(input_ids)}")
-            print("="*50 + "\n")
-            
+            print("=" * 50 + "\n")
+
         return {
             "pixel_values": pixel_values.detach().clone().to(torch.float32),
             "input_ids": input_ids.detach().clone().to(torch.long),
-            "labels": labels.detach().clone().to(torch.long)
+            "labels": labels.detach().clone().to(torch.long),
         }

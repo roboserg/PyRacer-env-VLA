@@ -1,224 +1,162 @@
 import torch
 import os
 import random
-import re
 from PIL import Image
-from torch.utils.data import Subset
 from transformers import (
-    AutoProcessor,
-    SmolVLMForConditionalGeneration,
     TrainerCallback,
     TrainingArguments,
     Trainer,
     DataCollatorForSeq2Seq,
 )
+from tqdm import tqdm
 from vla.dataset import RacingVLADataset
+from vla.model import get_model_and_processor, infer, post_process_output
 
 torch.set_float32_matmul_precision("high")
 
-# --- 1. SETUP & MODEL INITIALIZATION ---
-# If not None, load model from this path for fine-tuning
-FINE_TUNE_MODEL_PATH = "./models/smolvla-racer-final"
-MODEL_ID = "HuggingFaceTB/SmolVLM-Instruct"
+MODEL_DIR = "./models/2_new_gameplay"
 
-# Load Processor and Tokenizer
-load_path = FINE_TUNE_MODEL_PATH if FINE_TUNE_MODEL_PATH else MODEL_ID
-print(f"Loading processor and model from: {load_path}")
+def get_dataset(processor, tokenizer):
+    """Identifies the latest recording and returns a RacingVLADataset."""
+    # --- 1. IDENTIFY RECORDING ---
+    recordings_dir = "vla/data/recordings"
+    recordings = sorted([d for d in os.listdir(recordings_dir) if os.path.isdir(os.path.join(recordings_dir, d))])
+    if not recordings:
+        raise FileNotFoundError(f"No recordings found in {recordings_dir}")
 
-processor = AutoProcessor.from_pretrained(load_path)
-tokenizer = processor.tokenizer
+    latest_recording = os.path.join(recordings_dir, recordings[-1])
+    print(f"Using latest recording for training: {latest_recording}")
+    jsonl_file = os.path.join(latest_recording, "metadata.jsonl")
+    img_dir = os.path.join(latest_recording, "images")
 
-# Define and add action tokens (Must match dataset.py)
-action_tokens = [
-    "<FWD_0>",
-    "<FWD_1>",
-    "<LFT_0>",
-    "<LFT_1>",
-    "<RGT_0>",
-    "<RGT_1>",
-    "<BRK_0>",
-    "<BRK_1>",
-]
-# add_tokens returns number of newly added tokens
-num_added = tokenizer.add_tokens(action_tokens)
-print(f"Added {num_added} new action tokens.")
+    # --- 2. INITIALIZE DATASET ---
+    dataset = RacingVLADataset(jsonl_file, img_dir, processor, tokenizer)
 
-# --- TOKEN VERIFICATION ---
-for token in action_tokens:
-    ids = tokenizer.encode(token, add_special_tokens=False)
-    assert len(ids) == 1, (
-        f"CRITICAL: Token {token} was split into {len(ids)} pieces: {ids}. This will break the VLA action head."
-    )
-print("Token Verification Passed: All actions are single tokens.")
+    # --- 3. ACTION DISTRIBUTION ANALYSIS ---
+    dataset.print_stats()
 
-# Load Model in BF16 for 4090 Performance
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SmolVLMForConditionalGeneration.from_pretrained(
-    load_path,
-    torch_dtype=torch.bfloat16,
-    attn_implementation="sdpa",  # Fast Attention
-).to(device)
+    return dataset
 
-# CRITICAL: Always resize to match current tokenizer length
-model.resize_token_embeddings(len(tokenizer))
-
-total_params = sum(p.numel() for p in model.parameters())
-print(f"Total parameters: {total_params / 1e6:.2f}M")
-
-# --- 2. DATASET DEFINITION ---
-recordings_dir = "vla/data/recordings"
-recordings = sorted(
-    [
-        d
-        for d in os.listdir(recordings_dir)
-        if os.path.isdir(os.path.join(recordings_dir, d))
-    ]
-)
-if not recordings:
-    raise FileNotFoundError(f"No recordings found in {recordings_dir}")
-
-latest_recording = os.path.join(recordings_dir, recordings[-1])
-print(f"Using latest recording for training: {latest_recording}")
-jsonl_file = os.path.join(latest_recording, "metadata.jsonl")
-img_dir = os.path.join(latest_recording, "images")
-
-full_dataset = RacingVLADataset(
-    jsonl_file,
-    img_dir,
-    processor,
-    tokenizer,
-)
-print(f"Total dataset size: {len(full_dataset)} frames")
-
-# --- 3. FREEZE STRATEGY ---
-# Assertive unfreezing: Ensure everything is trainable first
-model.requires_grad_(True)
-
-# Freeze the Vision Backbone
-for param in model.model.vision_model.parameters():
-    param.requires_grad = False
-
-# Unfreeze the last 6 blocks of the vision model for task-specific adaptation
-for param in model.model.vision_model.encoder.layers[-6:].parameters():
-    param.requires_grad = True
-
-print("Freeze Strategy: Vision=Frozen, Connector=Trainable, LLM=Trainable")
-
-trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Trainable parameters: {trainable_params / 1e6:.2f}M")
-
-
-# --- 4. INFERENCE LOGIC & CALLBACK ---
-def run_inference(model, processor, dataset, num_samples=3):
-    """Run inference on random samples using the optimized 108-token path."""
+def eval_model(model, processor, dataset, num_samples=10):
+    """Run inference on random samples from dataset and calculate accuracy."""
     model.eval()
     indices = random.sample(range(len(dataset)), num_samples)
+    correct = 0
 
-    for idx in indices:
+    for i, idx in enumerate(tqdm(indices, desc="Evaluating")):
         item = dataset.data[idx]
-        raw_image = Image.open(os.path.join(dataset.img_dir, item["frame"])).convert(
-            "RGB"
+        raw_image = Image.open(os.path.join(dataset.img_dir, item["frame"])).convert("RGB")
+        response = infer(model, processor, raw_image)
+
+        # Ground Truth Action [accel, brake, left, right]
+        gt_action_vec = item["action"]
+        
+        # Predicted action
+        pred_action = post_process_output(response)
+        
+        # Compare exactly
+        match = (
+            bool(gt_action_vec[0]) == pred_action["accel"] and
+            bool(gt_action_vec[1]) == pred_action["brake"] and
+            bool(gt_action_vec[2]) == pred_action["left"] and
+            bool(gt_action_vec[3]) == pred_action["right"]
         )
+        if match:
+            correct += 1
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "Action:"},
-                ],
-            }
-        ]
-        prompt = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=False
-        )
-        if not prompt.endswith(" "):
-            prompt += " "
+        # Only print first 5 examples
+        if i < 5:
+            gt_str = f"<FWD_{int(gt_action_vec[0])}> <BRK_{int(gt_action_vec[1])}> <LFT_{int(gt_action_vec[2])}> <RGT_{int(gt_action_vec[3])}>"
+            tqdm.write(f"\n--- Frame: {item['frame']} ---")
+            tqdm.write(f"GT Action: {gt_str}")
+            tqdm.write(f"Model Out: {response}")
+            tqdm.write(f"Match: {'✓' if match else '✗'}")
+        elif i == 5:
+            tqdm.write(f"\n... (skipping detail for remaining {num_samples - 5} samples)")
 
-        inputs = processor(
-            text=prompt,
-            images=raw_image,
-            return_tensors="pt",
-            do_resize=True,
-            size={"longest_edge": 384},
-        ).to(device)
-
-        with torch.inference_mode():
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=10,
-                do_sample=False,
-                temperature=0.0,
-            )
-
-        response = processor.decode(generated_ids[0], skip_special_tokens=True)
-        action = item["action"]
-        # recorder.py order: [0:accel, 1:brake, 2:left, 3:right]
-        gt_str = f"<FWD_{int(action[0])}> <BRK_{int(action[1])}> <LFT_{int(action[2])}> <RGT_{int(action[3])}>"
-
-        print(f"\n--- Frame: {item['frame']} ---")
-        print(f"GT Action: {gt_str}")
-        print(f"Model Out: {response}")
-
+    accuracy = (correct / num_samples) * 100
+    print(f"\n>>> Evaluation Accuracy: {accuracy:.2f}% ({correct}/{num_samples})")
     model.train()
-
 
 class InferenceCallback(TrainerCallback):
     """Custom callback to trigger inference every N steps."""
-
-    def __init__(self, model, processor, dataset, every_n_steps=10):
+    def __init__(self, model, processor, dataset, every_n_steps=10, num_samples=20):
         self.model = model
         self.processor = processor
         self.dataset = dataset
         self.every_n_steps = every_n_steps
+        self.num_samples = num_samples
 
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step > 0 and state.global_step % self.every_n_steps == 0:
             print(f"\n=== MID-TRAIN INFERENCE (Step {state.global_step}) ===")
-            run_inference(self.model, self.processor, self.dataset, num_samples=5)
+            eval_model(
+                self.model, self.processor, self.dataset, num_samples=self.num_samples
+            )
 
+def main():
+    # --- 1. SETUP & MODEL INITIALIZATION ---
+    print(f"Training Model. Output Directory: {MODEL_DIR}")
+    
+    model, processor = get_model_and_processor(MODEL_DIR)
+    tokenizer = processor.tokenizer
 
-# --- 5. TRAINING CONFIGURATION ---
-training_args = TrainingArguments(
-    output_dir="./models/smolvla-racer-final",
-    per_device_train_batch_size=4,
-    gradient_accumulation_steps=4,
-    learning_rate=5e-5,
-    num_train_epochs=1,
-    bf16=True,
-    logging_first_step=True,
-    logging_steps=2,
-    save_strategy="no",
-    save_steps=200,
-    save_total_limit=None,
-    optim="adamw_torch_fused",
-    gradient_checkpointing=False,
-    remove_unused_columns=False,
-    report_to="none",
-)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total parameters: {total_params / 1e6:.2f}M")
 
+    # --- 2. DATASET DEFINITION ---
+    full_dataset = get_dataset(processor, tokenizer)
 
+    # --- 3. FREEZE STRATEGY ---
+    model.requires_grad_(True)
+    # Freeze the Vision Backbone
+    for param in model.model.vision_model.parameters():
+        param.requires_grad = False
+    # Unfreeze the last 12 blocks of the vision model
+    for param in model.model.vision_model.encoder.layers[-12:].parameters():
+        param.requires_grad = True
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=full_dataset,
-    data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
-    callbacks=[InferenceCallback(model, processor, full_dataset, every_n_steps=30)],
-)
+    print("Freeze Strategy: Vision=Frozen (last 12 layers un-frozen), Connector=Trainable, LLM=Trainable")
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Trainable parameters: {trainable_params / 1e6:.2f}M")
 
-# --- 6. EXECUTION ---
-print("Starting full VLA Training...")
-try:
-    trainer.train()
-except KeyboardInterrupt:
-    print("\n\n!!! Training interrupted by user (Ctrl+C) !!!")
-    print("Saving current progress and running final evaluation...")
+    # --- 4. TRAINING CONFIGURATION ---
+    training_args = TrainingArguments(
+        output_dir=MODEL_DIR,
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=4,
+        learning_rate=5e-5,
+        num_train_epochs=3,
+        bf16=True,
+        logging_first_step=True,
+        logging_steps=2,
+        save_strategy="no",
+        optim="adamw_torch_fused",
+        report_to="none",
+    )
 
-print("\n=== FINAL MODEL EVALUATION ===")
-run_inference(model, processor, full_dataset, num_samples=10)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=full_dataset,
+        data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
+        callbacks=[InferenceCallback(model, processor, full_dataset, every_n_steps=100, num_samples=50)],
+    )
 
-print("\n=== SAVE MODEL ===")
-trainer.save_model("./models/smolvla-racer-final")
-processor.save_pretrained("./models/smolvla-racer-final")
-print("Training Complete. Model saved to ./models/smolvla-racer-final")
+    # --- 5. EXECUTION ---
+    print("Starting full VLA Training...")
+    try:
+        trainer.train()
+    except KeyboardInterrupt:
+        print("\n\n!!! Training interrupted by user (Ctrl+C) !!!")
+
+    print("\n=== FINAL MODEL EVALUATION ===")
+    eval_model(model, processor, full_dataset, num_samples=30)
+
+    print("\n=== SAVE MODEL ===")
+    trainer.save_model(MODEL_DIR)
+    processor.save_pretrained(MODEL_DIR)
+    print(f"Training Complete. Model saved to {MODEL_DIR}")
+
+if __name__ == "__main__":
+    main()

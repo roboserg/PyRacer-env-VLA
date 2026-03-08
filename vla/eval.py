@@ -12,7 +12,8 @@ import sys
 import pygame
 from vla.vla_controller import VLAController
 from vla.environment import GameEnvironment
-from vla.utils import load_model_and_processor, MODEL_DIR
+from vla.model import get_model_and_processor
+from vla.train import MODEL_DIR
 
 pygame.init()
 pygame.mixer.init()
@@ -27,7 +28,7 @@ def eval():
     print(f"Using device: {device}")
 
     try:
-        model, processor = load_model_and_processor(MODEL_DIR, device=device)
+        model, processor = get_model_and_processor(MODEL_DIR)
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         print("Please train the model first with: python vla/train.py")
