@@ -73,6 +73,9 @@ class GameEnvironment:
         # Get delta time AFTER inference to reset the clock
         self.game.get_dt()
         
+        # Process Pygame events (for hotkeys like 'R' and window close)
+        self.game.get_events()
+        
         # Cap dt to prevent physics glitches
         if self.game.dt > 0.05:
             self.game.dt = 0.05
@@ -100,7 +103,8 @@ class GameEnvironment:
         should_record = self.frame_count % 6 == 0
 
         if should_record and self.recorder:
-            self.recorder.record_frame(self.current_observation, action)
+            # Sync filename with game frame number
+            self.recorder.record_frame(self.current_observation, action, frame_idx=self.frame_count)
 
         # Check for quit signals
         info = {
@@ -139,12 +143,12 @@ class GameEnvironment:
         # Create initial observation
         self.current_observation = self._create_observation()
 
+        step_count = 0
         try:
-            step_count = 0
             print_interval = 10  # Print stats more frequently in sync mode
 
             while self.game.playing:
-                # Run one step
+                # Run one step (the Game's custom FPS clock handles the 60 FPS cap internally)
                 obs, info = self.step()
 
                 # Check quit conditions
@@ -163,8 +167,8 @@ class GameEnvironment:
                         print(f"\n✓ Max steps reached ({max_steps})")
                     break
 
-                # Print progress
-                if step_count % print_interval == 0 and step_count > 0:
+                # Print progress (ONLY if not recording, to avoid clutter)
+                if not self.recorder and step_count % print_interval == 0 and step_count > 0:
                     fps = self.game.clock.get_fps()
                     if verbose:
                         print(
@@ -190,10 +194,6 @@ class GameEnvironment:
                     print(f"Lap times: {[round(t, 2) for t in self.game.map.lap_times]}")
                 print(f"{'=' * 60}\n")
 
-            # Save recording metadata
-            if self.recorder:
-                self.recorder.save_metadata()
-
             stats = {
                 "steps": step_count,
                 "frames": self.frame_count,
@@ -202,8 +202,10 @@ class GameEnvironment:
                 "laps": self.game.map.lap,
                 "lap_times": self.game.map.lap_times,
             }
-
             return stats
 
         finally:
+            # Save recording metadata (ALWAYS save if recorder exists)
+            if self.recorder:
+                self.recorder.save_metadata()
             self.game.playing = False

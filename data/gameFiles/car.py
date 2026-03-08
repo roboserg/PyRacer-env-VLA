@@ -44,10 +44,16 @@ class Car():
         
         # Steering timer for hard turn transition
         self.steer_timer = 0
-        self.hard_steer_threshold = 2.0 # Seconds before switching to hard turn
+        self.slight_steer_threshold = 0.25 # Seconds before switching to slight turn
+        self.hard_steer_threshold = 1.5 # Seconds before switching to hard turn
+        self.last_steer_dir = None # Track 'left', 'right', or None
         
         # Base vertical position for the car
         self.base_y = 220
+        self.current_draw_y = 220
+        
+        # Particle systems
+        self.dirt_particles = []
 
     def get_current_scaled_image(self, name, current_h):
         """Helper to scale a sprite based on current target height"""
@@ -58,7 +64,7 @@ class Car():
 
     def clamp_speed(self):
         self.speed = max(0, self.speed)
-        self.speed = min(self.speed,1)
+        self.speed = min(self.speed, 1.5) # Increased max speed limit to 2.0 (200 Km/h)
 
     def update(self):
         # Update the Car's movement
@@ -71,34 +77,99 @@ class Car():
             self.speed -=.75 * self.game.dt
 
         if self.game.actions['left'] or self.game.actions['right']:
+            current_dir = 'left' if self.game.actions['left'] else 'right'
+            # Reset timer if we switched directions
+            if current_dir != self.last_steer_dir:
+                self.steer_timer = 0
+            
             self.steer_timer += self.game.dt
+            self.last_steer_dir = current_dir
+            
+            # Increased steering sensitivity for sharper turns (0.3 -> 0.45)
             if self.game.actions['left']:
-                self.curvature -= .3 * self.game.dt
+                self.curvature -= .4 * self.game.dt
             if self.game.actions['right']:
-                self.curvature += .3 * self.game.dt
+                self.curvature += .4 * self.game.dt
         else:
             self.steer_timer = 0
+            self.last_steer_dir = None
 
-        if abs(self.curvature - self.game.map.track_curvature) >= .6:
-            self.speed -= 5 * self.game.dt
-
+        # Collision with road wall / off-road
+        steer_diff = self.curvature - self.game.map.track_curvature
+        
+        # Softened road boundaries with a hard screen limit
+        if steer_diff > 0.6:
+            self.curvature -= 0.5 * self.game.dt # Increased push back
+            self.speed -= 1.5 * self.game.dt # Speed penalty
+            if self.speed > 0.05: self.spawn_dirt(0.6)
+            # Hard physical limit to ensure car stays on screen grass
+            if steer_diff > 0.8: self.curvature = self.game.map.track_curvature + 0.8
+        elif steer_diff < -0.6:
+            self.curvature += 0.5 * self.game.dt # Increased push back
+            self.speed -= 1.5 * self.game.dt # Speed penalty
+            if self.speed > 0.05: self.spawn_dirt(-0.6)
+            # Hard physical limit to ensure car stays on screen grass
+            if steer_diff < -0.8: self.curvature = self.game.map.track_curvature - 0.8
+        
         self.clamp_speed()
         self.distance += 70 * self.speed * self.game.dt
+        
+        # Update particles
+        self.update_dirt()
+
+    def spawn_dirt(self, steer_diff):
+        import random
+        # Spawn dirt near the wheels using SCREEN coordinates for perfect alignment
+        for _ in range(3):
+            # Center dirt on the sprite's width
+            img_w = self.image.get_width()
+            img_h = self.image.get_height()
+            
+            p = {
+                "x": self.position_int + (img_w // 2) + random.randint(-15, 15),
+                "y": self.current_draw_y + img_h - 5,
+                "vx": random.uniform(-1.0, 1.0), 
+                "vy": random.uniform(1.0, 3.0), # Move "down" the screen
+                "life": 1.0,
+                "size": random.randint(3, 6),
+                "color": (random.randint(100, 150), random.randint(70, 100), 20)
+            }
+            self.dirt_particles.append(p)
+
+    def update_dirt(self):
+        for p in self.dirt_particles[:]:
+            # Screen-space physics: move down and slightly horizontally
+            p["x"] += p["vx"]
+            p["y"] += p["vy"]
+            # Slower life decay
+            p["life"] -= self.game.dt * 0.8
+            if p["life"] <= 0:
+                self.dirt_particles.remove(p)
+
+    def draw_dirt(self):
+        for p in self.dirt_particles:
+            alpha = int(p["life"] * 255)
+            # Scaling size slightly as it flows back
+            size = int(p["size"] * (1.0 + (1.0 - p["life"]) * 0.5))
+            
+            s = pygame.Surface((size, size), pygame.SRCALPHA)
+            s.fill((*p["color"], alpha))
+            self.game.display.blit(s, (p["x"], p["y"]))
 
     def draw(self):
         # Determine current target height based on speed (perspective)
-        # Higher speed = higher on screen = smaller sprite
-        # 40 (base) -> 32 (max speed - 20% reduction)
         current_h = int(self.base_h * (1.0 - (self.speed * 0.20)))
 
         # Determine which sprite name to use
         actions = self.game.actions
         sprite_name = "straight"
 
-        if actions.get("left"):
+        if actions.get("left") and self.steer_timer > self.slight_steer_threshold:
             sprite_name = "hard_left" if self.steer_timer > self.hard_steer_threshold else "slight_left"
-        elif actions.get("right"):
+        elif actions.get("right") and self.steer_timer > self.slight_steer_threshold:
             sprite_name = "hard_right" if self.steer_timer > self.hard_steer_threshold else "slight_right"
+        else:
+            sprite_name = "straight"
         
         # Get scaled image for current frame
         self.image = self.get_current_scaled_image(sprite_name, current_h)
@@ -107,12 +178,21 @@ class Car():
         steer_diff = self.curvature - self.game.map.track_curvature
         self.position = steer_diff
         
-        # Centering logic: use the sprite's current width to offset the blit position
+        # Centering logic
         img_w = self.image.get_width()
+        img_h = self.image.get_height()
         self.position_int = self.game.DISPLAY_W / 2 + int(self.game.DISPLAY_W * self.position / 2) - (img_w // 2)
         
         # Vertical movement based on speed
         forward_offset = int(self.speed * 44)
-        current_y = self.base_y - forward_offset
+        self.current_draw_y = self.base_y - forward_offset
         
-        self.game.display.blit(self.image, (self.position_int, current_y))
+        # HARD SCREEN BOUNDARY CLAMPING
+        # Prevents the car from ever disappearing horizontally or vertically
+        self.position_int = max(0, min(self.position_int, self.game.DISPLAY_W - img_w))
+        self.current_draw_y = max(0, min(self.current_draw_y, self.game.DISPLAY_H - img_h))
+        
+        # Draw dirt BEFORE car
+        self.draw_dirt()
+        
+        self.game.display.blit(self.image, (self.position_int, self.current_draw_y))

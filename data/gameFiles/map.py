@@ -5,9 +5,10 @@ from data.gameFiles.car import Car
 class Map:
     def __init__(self, game):
         self.game = game
+        # RESTORED 40% HORIZON (Match your new training data)
         self.mid_w, self.mid_h = (
             int(self.game.DISPLAY_W / 2),
-            int(self.game.DISPLAY_H / 2),
+            int(self.game.DISPLAY_H * 0.4), 
         )
         self.car = Car(self.game)
         self.curvature = 0
@@ -19,10 +20,22 @@ class Map:
         self.background_img = pygame.image.load(
             os.path.join(self.game.img_dir, "background.png")
         ).convert()
+        
+        # Initialize persistent road details (blobs/grit)
+        self.road_details = []
+        for _ in range(60):
+            self.road_details.append({
+                "dist_idx": random.uniform(0, 100), 
+                "offset": random.uniform(-0.8, 0.8),
+                "size_w": random.randint(2, 8),      
+                "size_h": random.randint(2, 5),      
+                "color": random.randint(50, 100)
+            })
 
     def render(self):
         # self.update()
         self.draw_map()
+        self.draw_road_details()
 
     def update(self):
         # Update the car
@@ -68,14 +81,17 @@ class Map:
 
         x, y = 0, 0
         # Draw the Entire map
-        while y < self.mid_h:
+        render_height = self.game.DISPLAY_H - self.mid_h
+        
+        while y < render_height:
             x = 0
             while x < self.game.DISPLAY_W:
-                # Calculate perspective (farther tiles are closer to 1)
-                perspective = float(y / self.mid_w)
+                perspective = float(y / render_height)
 
                 midpoint = 0.5 + self.curvature * math.pow(1 - perspective, 3)
-                road_w = 0.2 + perspective * 0.9
+                
+                # RESTORED 0.7 WIDTH (Match your new training data)
+                road_w = 0.2 + perspective * 0.7
                 clip_width = road_w * 0.16
 
                 road_w *= 0.5
@@ -107,7 +123,18 @@ class Map:
                 if x >= LeftGrass and x < LeftClip:
                     pygame.draw.rect(self.game.display, clip_color, (x, nRow, 8, 8))
                 if x >= LeftClip and x < RightClip:
-                    pygame.draw.rect(self.game.display, (89, 89, 89), (x, nRow, 8, 8))
+                    # Base road color
+                    road_color = (89, 89, 89)
+                    
+                    # Middle White Line
+                    center_x = int(midpoint * self.game.DISPLAY_W)
+                    line_w = 4 
+                    if abs(x - center_x) < line_w:
+                        dash_phase = 80 * math.pow(1 - perspective, 2) + self.car.distance * 0.5
+                        if math.sin(dash_phase * 0.2) > 0:
+                            road_color = (255, 255, 255)
+                            
+                    pygame.draw.rect(self.game.display, road_color, (x, nRow, 8, 8))
                 if x >= RightClip and x < RightGrass:
                     pygame.draw.rect(self.game.display, clip_color, (x, nRow, 8, 8))
                 if x >= RightGrass and x < self.game.DISPLAY_W:
@@ -118,6 +145,26 @@ class Map:
         # Draw the player's car
         self.car.draw()
         self.draw_stats()
+
+    def draw_road_details(self):
+        """Draw persistent blobs that move and scale with EXACT road perspective"""
+        for blob in self.road_details:
+            world_pos = (blob["dist_idx"] * 100.0 + self.car.distance * 0.5) % 100
+            p = world_pos / 100.0 
+            
+            if p > 0.05:
+                midpoint = 0.5 + self.curvature * math.pow(1 - (p * 0.56), 3)
+                # Match 0.7 width
+                road_w = 0.2 + (p * 0.56) * 0.7
+                
+                screen_y = self.mid_h + int(p * (self.game.DISPLAY_H - self.mid_h))
+                screen_x = int((midpoint + blob["offset"] * road_w * 0.5) * self.game.DISPLAY_W)
+                
+                w = max(1, int(blob["size_w"] * p))
+                h = max(1, int(blob["size_h"] * p))
+                
+                color = (blob["color"], blob["color"], blob["color"])
+                pygame.draw.rect(self.game.display, color, (screen_x, screen_y, w, h))
 
     def draw_stats(self):
         speed_color = (255, 255, 255)
@@ -161,62 +208,39 @@ class Map:
             i += 1
 
     def draw_action_arrows(self):
-        # Base position for the arrow group
         base_x, base_y = 10, 80
         size = 15
         spacing = 20
-
         actions = self.game.actions
 
         def draw_arrow(x, y, points, active):
             color = (0, 255, 0) if active else (50, 50, 50)
-            # Offset points by x, y
             abs_points = [(p[0] + x, p[1] + y) for p in points]
             pygame.draw.polygon(self.game.display, color, abs_points)
-            # Draw outline
             pygame.draw.polygon(self.game.display, (200, 200, 200), abs_points, 1)
 
-        # UP (Accel)
         up_pts = [(size // 2, 0), (size, size), (0, size)]
         draw_arrow(base_x + spacing, base_y, up_pts, actions.get("accel", False))
-
-        # DOWN (Brake)
         down_pts = [(0, 0), (size, 0), (size // 2, size)]
-        draw_arrow(
-            base_x + spacing, base_y + spacing, down_pts, actions.get("brake", False)
-        )
-
-        # LEFT
+        draw_arrow(base_x + spacing, base_y + spacing, down_pts, actions.get("brake", False))
         left_pts = [(0, size // 2), (size, 0), (size, size)]
         draw_arrow(base_x, base_y + spacing, left_pts, actions.get("left", False))
-
-        # RIGHT
         right_pts = [(size, size // 2), (0, 0), (0, size)]
-        draw_arrow(
-            base_x + spacing * 2, base_y + spacing, right_pts, actions.get("right", False)
-        )
+        draw_arrow(base_x + spacing * 2, base_y + spacing, right_pts, actions.get("right", False))
 
     def load_track(self):
-        """Generate initial random track segments"""
         self.track = []
         self.track_length = 0
-        # Generate initial track with enough segments
         self.generate_track_segments(20)
 
     def generate_track_segments(self, num_segments):
-        """Generate random track segments and add them to the track"""
         for _ in range(num_segments):
-            # Random curvature between -0.8 and 0.8
-            # -0.8 = sharp left turn, 0 = straight, 0.8 = sharp right turn
             curvature = random.uniform(-0.8, 0.8)
-            # Random segment length
             length = random.uniform(50, 200)
             self.track.append([curvature, length])
             self.track_length += length
 
     def update_track_generation(self, car_distance):
-        """Check if we need to generate more track based on car distance"""
-        # If car is getting close to the end of the generated track, add more
         if car_distance > self.track_length - 1000:
             self.generate_track_segments(10)
 

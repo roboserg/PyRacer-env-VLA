@@ -47,7 +47,7 @@ class Recorder:
             self.images_dir.mkdir(parents=True, exist_ok=True)
             print(f"✓ Recorder initialized: {self.output_dir}")
 
-    def record_frame(self, observation: Observation, action: dict, text: str = "") -> None:
+    def record_frame(self, observation: Observation, action: dict, text: str = "", frame_idx: int = None) -> None:
         """
         Record a single frame with action and annotation.
 
@@ -57,57 +57,59 @@ class Recorder:
             observation: Current game observation with frame surface
             action: Action dict {"accel", "brake", "left", "right"}
             text: Optional manual annotation text
+            frame_idx: Optional specific frame index (usually game frame count)
         """
         if not self.enabled:
             return
 
-        self.frame_count += 1
+        # Initialize start_time on first recorded frame
+        if self.start_time is None:
+            self.start_time = time.time()
 
-        # Generate annotation from game state (only if state changed)
+        # Increment internal count of saved frames
+        self.recorded_count = getattr(self, "recorded_count", 0) + 1
+        
+        # Use provided frame_idx or fall back to sequential count
+        save_idx = frame_idx if frame_idx is not None else self.recorded_count
+
+        # Generate annotation from game state
         if text:
             annotation = text
         else:
             annotation = self._generate_annotation(observation, action)
 
-        # Only record if annotation changed or this is first frame
-        if annotation != self.last_annotation or self.frame_count == 1:
-            # Initialize start_time on first recorded frame
-            if self.start_time is None:
-                self.start_time = time.time()
+        # Save frame image
+        frame_name = f"frame_{save_idx:05d}.jpg"
+        frame_path = self.images_dir / frame_name
 
-            # Save frame image
-            frame_name = f"frame_{self.frame_count:05d}.jpg"
-            frame_path = self.images_dir / frame_name
+        # Convert pygame surface to JPEG
+        pygame.image.save(observation.frame, str(frame_path))
 
-            # Convert pygame surface to JPEG
-            pygame.image.save(observation.frame, str(frame_path))
+        # Normalize action to [0, 1] range
+        action_vector = [
+            float(action.get("accel", False)),
+            float(action.get("brake", False)),
+            float(action.get("left", False)),
+            float(action.get("right", False)),
+        ]
 
-            # Normalize action to [0, 1] range
-            action_vector = [
-                float(action.get("accel", False)),
-                float(action.get("brake", False)),
-                float(action.get("left", False)),
-                float(action.get("right", False)),
-            ]
+        # Calculate timestamp relative to start of recording
+        elapsed_time = time.time() - self.start_time
 
-            # Calculate timestamp relative to start of recording
-            elapsed_time = time.time() - self.start_time
+        # Create metadata entry with timestamp
+        entry = {
+            "frame": frame_name,
+            "timestamp": round(elapsed_time, 2),
+            "speed": round(observation.speed, 2),
+            "action": action_vector,
+            "text": annotation,
+        }
 
-            # Create metadata entry with timestamp
-            entry = {
-                "frame": frame_name,
-                "timestamp": round(elapsed_time, 2),
-                "speed": round(observation.speed, 2),
-                "action": action_vector,
-                "text": annotation,
-            }
+        self.metadata_entries.append(entry)
+        self.last_annotation = annotation
 
-            self.metadata_entries.append(entry)
-            self.last_annotation = annotation
-
-            # Print progress
-            if self.frame_count % 10 == 0:
-                print(f"  Recorded {self.frame_count} frames | {annotation}")
+        # Print progress using the synced index
+        print(f"  Frame {save_idx}: {annotation}")
 
         self.last_obs = observation
 

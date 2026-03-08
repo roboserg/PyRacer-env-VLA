@@ -18,7 +18,7 @@ torch.set_float32_matmul_precision("high")
 
 # --- 1. SETUP & MODEL INITIALIZATION ---
 # If not None, load model from this path for fine-tuning
-FINE_TUNE_MODEL_PATH = "smolvla-racer-final"
+FINE_TUNE_MODEL_PATH = "./models/smolvla-racer-final"
 MODEL_ID = "HuggingFaceTB/SmolVLM-Instruct"
 
 # Load Processor and Tokenizer
@@ -78,6 +78,7 @@ if not recordings:
     raise FileNotFoundError(f"No recordings found in {recordings_dir}")
 
 latest_recording = os.path.join(recordings_dir, recordings[-1])
+print(f"Using latest recording for training: {latest_recording}")
 jsonl_file = os.path.join(latest_recording, "metadata.jsonl")
 img_dir = os.path.join(latest_recording, "images")
 
@@ -183,7 +184,7 @@ training_args = TrainingArguments(
     per_device_train_batch_size=4,
     gradient_accumulation_steps=4,
     learning_rate=5e-5,
-    num_train_epochs=30,
+    num_train_epochs=1,
     bf16=True,
     logging_first_step=True,
     logging_steps=2,
@@ -208,7 +209,11 @@ trainer = Trainer(
 
 # --- 6. EXECUTION ---
 print("Starting full VLA Training...")
-trainer.train()
+try:
+    trainer.train()
+except KeyboardInterrupt:
+    print("\n\n!!! Training interrupted by user (Ctrl+C) !!!")
+    print("Saving current progress and running final evaluation...")
 
 print("\n=== FINAL MODEL EVALUATION ===")
 run_inference(model, processor, full_dataset, num_samples=10)

@@ -68,8 +68,6 @@ class Game:
 
     def get_events(self):
         # Gets all events from the user, stores them in the 'actions' dictionary
-        # Controls dictionary contains keys to the player's specified control settings
-        # Controls can be changed in the "controls option" menu
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.playing = False
@@ -92,6 +90,8 @@ class Game:
                     self.actions["start"] = True
                 if event.key == self.controls["Run"]:
                     self.actions["run"] = True
+                if event.key == pygame.K_r:
+                    self.randomize_car_state()
 
             if event.type == pygame.KEYUP:
                 if event.key == self.controls["Left"]:
@@ -106,6 +106,20 @@ class Game:
                     self.actions["start"] = False
                 if event.key == self.controls["Run"]:
                     self.actions["run"] = False
+
+    def randomize_car_state(self):
+        """Randomly places the car on the track with random speed for testing."""
+        import random
+        if hasattr(self, "map") and hasattr(self.map, "car"):
+            car = self.map.car
+            # Random distance along the track
+            car.distance = random.uniform(0, self.map.track_length)
+            # Random lateral position (within road bounds)
+            # Use self.map.curvature as baseline for "on-track"
+            car.curvature = self.map.track_curvature + random.uniform(-0.5, 0.5)
+            # Random speed (0.2 to 1.5)
+            car.speed = random.uniform(0.2, 1.5)
+            print(f"DEBUG: Randomized car to dist={car.distance:.1f}, speed={car.speed:.2f}")
 
     # Update any of the game sprites
     def update(self):
