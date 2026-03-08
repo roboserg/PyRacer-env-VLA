@@ -26,11 +26,6 @@ class VLAController(Controller):
             image = Image.fromarray(
                 pygame.surfarray.array3d(frame).transpose(1, 0, 2)
             ).convert("RGB")
-            
-            # DEBUG: Save image occasionally to verify input
-            if getattr(self, "step_count", 0) % 20 == 0:
-                image.save("vla_debug_input.jpg")
-            self.step_count = getattr(self, "step_count", 0) + 1
 
             # Standard chat template logic
             messages = [
