@@ -1,61 +1,100 @@
 #!/usr/bin/env python3
 """
-Eval script - runs the game with a trained VLA model.
-Run with: python vla/eval.py
-
-This loads the model from ./smolvla-racer-final and uses VLAController
-to play the game autonomously.
+Play script - run the game with human keyboard control.
+Run with: python vla/play.py
 """
 
-import torch
-import sys
+import argparse
 import pygame
-from vla.vla_controller import VLAController
-from vla.environment import GameEnvironment
-from vla.model import get_model_and_processor
-from vla.train import MODEL_DIR
 
-pygame.init()
-pygame.mixer.init()
+from vla.agents.human_agent import HumanAgent
+from vla.env import GameEnvironment
 
-def eval():
-    """Run evaluation with the trained VLA model."""
-    print("=" * 60)
-    print("PyRacer VLA Evaluation")
-    print("=" * 60)
-    print(f"Model directory: {MODEL_DIR}")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
 
-    try:
-        model, processor = get_model_and_processor(MODEL_DIR)
-    except FileNotFoundError as e:
-        print(f"ERROR: {e}")
-        print("Please train the model first with: python vla/train.py")
-        sys.exit(1)
-
-    controller = VLAController(
-        model=model, processor=processor, device=device, max_length=128
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Play PyRacer")
+    parser.add_argument(
+        "--max-steps", type=int, default=5000, help="Maximum number of steps to play"
     )
+    return parser.parse_args()
 
-    print(f"\nStarting game with {controller.__class__.__name__}...")
+
+def play(env: GameEnvironment, max_steps: int = 5000):
+    """Play with human keyboard input using Gym interface."""
+    print("=" * 60)
+    print("PyRacer - Human Play Mode")
+    print("=" * 60)
+    print("Controls: Arrow keys (UP=accel, DOWN=brake, LEFT/RIGHT=steer)")
     print("Press ESC to quit early\n")
 
+    obs, info = env.reset()
+    total_reward = 0
+    step_count = 0
+
+    running = True
+    while running:
+        # Get human action from keyboard
+        keys = pygame.key.get_pressed()
+
+        # Map arrow keys to discrete action (0-15)
+        accel = 1 if keys[pygame.K_UP] else 0
+        brake = 2 if keys[pygame.K_DOWN] else 0
+        left = 4 if keys[pygame.K_LEFT] else 0
+        right = 8 if keys[pygame.K_RIGHT] else 0
+        action = accel + brake + left + right
+
+        # Check for quit
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+
+        # Step environment
+        obs, reward, terminated, truncated, info = env.step(action)
+        total_reward += reward
+        step_count += 1
+
+        # Render
+        env.render()
+
+        if terminated or truncated:
+            break
+
+        if step_count >= max_steps:
+            print(f"\nMax steps reached ({max_steps})")
+            break
+
+    print(f"\nGame Over!")
+    print(f"Total steps: {step_count}")
+    print(f"Total reward: {total_reward:.2f}")
+    print(f"Average reward: {total_reward / max(step_count, 1):.2f}")
+    print(f"Final speed: {info['speed']:.2f}")
+
+
+def main():
+    args = parse_args()
+
+    pygame.display.init()
+    pygame.font.init()
+
+    controller = HumanAgent()
     env = GameEnvironment(controller=controller, recorder=None)
 
-    stats = env.run(max_laps=2, verbose=True)
-
-    print("\nEvaluation complete!")
-    return stats
-
-
-if __name__ == "__main__":
     try:
-        eval()
+        play(env, args.max_steps)
     except KeyboardInterrupt:
-        print("\n\nEvaluation interrupted by user")
+        print("\n\nInterrupted by user")
     except Exception as e:
         print(f"\nERROR: {e}")
         import traceback
 
         traceback.print_exc()
+    finally:
+        env.close()
+
+
+if __name__ == "__main__":
+    main()

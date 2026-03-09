@@ -18,7 +18,8 @@ class Map:
         self.background_img = pygame.image.load(
             os.path.join(self.game.img_dir, "background.png")
         ).convert()
-        
+        self.bg_offset = 0.0
+
         # Initialize persistent road details (blobs/grit)
         self.road_details = []
         for _ in range(60):
@@ -62,9 +63,15 @@ class Map:
 
         self.track_curvature += self.curvature * self.game.dt * self.car.speed
 
+        # Slowly scroll horizon based on road curvature (simulates turning)
+        self.bg_offset += self.curvature * self.car.speed * self.game.dt * 50
+
     def draw_map(self):
 
-        self.game.display.blit(self.background_img, (0, 0))
+        bg_w = self.background_img.get_width()
+        offset = int(self.bg_offset) % bg_w
+        self.game.display.blit(self.background_img, (-offset, 0))
+        self.game.display.blit(self.background_img, (bg_w - offset, 0))
 
         x, y = 0, 0
         # Draw the Entire map

@@ -1,4 +1,5 @@
 import pygame, time, os
+
 from data.gameFiles.map import Map
 from data.util.controls import load_controls
 from data.util.fps import FPS
@@ -10,8 +11,8 @@ from data.menus.controls_menu import ControlsMenu
 
 class Game:
     def __init__(self):
-        pygame.mixer.pre_init(44100, -16, 1, 512)  # Prevents delay in jumping sound
-        pygame.init()
+        pygame.display.init()
+        pygame.font.init()
         # Intitialize display surface and screen
         self.TITLE = "Racing Game Demo"
         self.DISPLAY_W, self.DISPLAY_H = (
@@ -33,6 +34,7 @@ class Game:
         self.clock = FPS(
             60
         )  # Argument in FPS class will cap the FPS at the given value
+        self.dt = 0
         self.load_controls()
         self.load_menus()
         self.load_images()
@@ -43,19 +45,17 @@ class Game:
     def reset(self):
         self.map = Map(self)
         self.go_text = 0
-        self.lap_time = 0
-        self.countdown = 3
+        self.total_time = 0
+        self.countdown = 0
         self.countdownUpdate = time.time()
         self.counting_down = True
         self.complete = False
         self.finished_countdown = 0
         self.speed_history = []  # Reset speed history for new race
-        self.light_sound.play()
 
     # Main Game Loop. Starts by resetting the game, and then loops until playing is set to false
     def game_loop(self):
         self.reset()
-        pygame.mixer.music.play(-1)
         while self.playing:
             self.get_dt()
             self.get_events()
@@ -64,7 +64,6 @@ class Game:
             else:
                 self.update()
             self.render()
-        pygame.mixer.music.stop()
 
     def get_events(self):
         # Gets all events from the user, stores them in the 'actions' dictionary
@@ -110,6 +109,7 @@ class Game:
     def randomize_car_state(self):
         """Randomly places the car on the track with random speed for testing."""
         import random
+
         if hasattr(self, "map") and hasattr(self.map, "car"):
             car = self.map.car
             # Random distance along the track
@@ -119,7 +119,9 @@ class Game:
             car.curvature = self.map.track_curvature + random.uniform(-0.5, 0.5)
             # Random speed (0.2 to 1.5)
             car.speed = random.uniform(0.2, 1.5)
-            print(f"DEBUG: Randomized car to dist={car.distance:.1f}, speed={car.speed:.2f}")
+            print(
+                f"DEBUG: Randomized car to dist={car.distance:.1f}, speed={car.speed:.2f}"
+            )
 
     # Update any of the game sprites
     def update(self):
@@ -150,7 +152,6 @@ class Game:
                 self.light_images[self.countdown - 1], (self.DISPLAY_W * 0.5 - 32, 50)
             )
         elif self.go_text < 0.75:
-            self.go_sound.play()
             self.go_text += self.dt
             self.display.blit(self.go_img, (self.DISPLAY_W * 0.5 - 32, 50))
 
@@ -203,7 +204,7 @@ class Game:
         self.display.blit(text_surface, text_rect)
 
     def timer(self):
-        self.lap_time += self.dt
+        self.total_time += self.dt
 
         # Track speed for averaging
         if self.map:
@@ -241,7 +242,6 @@ class Game:
         if now - self.countdownUpdate > 1:
             self.countdownUpdate = now
             self.countdown -= 1
-            self.light_sound.play()
         if self.countdown > 0:
             self.counting_down = False
 
@@ -250,15 +250,7 @@ class Game:
             os.path.dirname(os.path.abspath(__file__))
         )  # Goes from gameFiles to data
         self.img_dir = os.path.join(self.dir, "images")
-        self.sound_dir = os.path.join(self.dir, "sounds")
         self.font_name = os.path.join(self.dir, "menus", "november.ttf")
-        self.theme = pygame.mixer.music.load(
-            os.path.join(self.sound_dir, "racing_song.ogg")
-        )
-        self.light_sound = pygame.mixer.Sound(os.path.join(self.sound_dir, "light.wav"))
-        self.go_sound = pygame.mixer.Sound(os.path.join(self.sound_dir, "go.wav"))
-        self.light_sound.set_volume(0.3)
-        self.go_sound.set_volume(0.2)
 
     def load_images(self):
         self.light_images = [

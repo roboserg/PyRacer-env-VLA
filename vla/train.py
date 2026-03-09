@@ -1,6 +1,7 @@
 import torch
 import os
 import random
+import argparse
 from PIL import Image
 from transformers import (
     TrainerCallback,
@@ -15,17 +16,17 @@ from vla.model import get_model_and_processor, infer, post_process_output
 torch.set_float32_matmul_precision("high")
 
 MODEL_DIR = "./models/2_new_gameplay"
+DATASET_DIR = "vla/data/recordings"
 
 def get_dataset(processor, tokenizer):
     """Identifies the latest recording and returns a RacingVLADataset."""
     # --- 1. IDENTIFY RECORDING ---
-    recordings_dir = "vla/data/recordings"
-    recordings = sorted([d for d in os.listdir(recordings_dir) if os.path.isdir(os.path.join(recordings_dir, d))])
+    recordings = sorted([d for d in os.listdir(DATASET_DIR) if os.path.isdir(os.path.join(DATASET_DIR, d))])
     if not recordings:
-        raise FileNotFoundError(f"No recordings found in {recordings_dir}")
+        raise FileNotFoundError(f"No recordings found in {DATASET_DIR}")
 
-    latest_recording = os.path.join(recordings_dir, recordings[-1])
-    print(f"Using latest recording for training: {latest_recording}")
+    latest_recording = os.path.join(DATASET_DIR, recordings[-1])
+    print(f"Using latest recording for dataset: {latest_recording}")
     jsonl_file = os.path.join(latest_recording, "metadata.jsonl")
     img_dir = os.path.join(latest_recording, "images")
 
@@ -40,6 +41,7 @@ def get_dataset(processor, tokenizer):
 def eval_model(model, processor, dataset, num_samples=10):
     """Run inference on random samples from dataset and calculate accuracy."""
     model.eval()
+    num_samples = min(num_samples, len(dataset))
     indices = random.sample(range(len(dataset)), num_samples)
     correct = 0
 
@@ -76,7 +78,7 @@ def eval_model(model, processor, dataset, num_samples=10):
 
     accuracy = (correct / num_samples) * 100
     print(f"\n>>> Evaluation Accuracy: {accuracy:.2f}% ({correct}/{num_samples})")
-    model.train()
+    return accuracy
 
 class InferenceCallback(TrainerCallback):
     """Custom callback to trigger inference every N steps."""
@@ -93,10 +95,16 @@ class InferenceCallback(TrainerCallback):
             eval_model(
                 self.model, self.processor, self.dataset, num_samples=self.num_samples
             )
+            self.model.train()
 
 def main():
+    parser = argparse.ArgumentParser(description="Train or evaluate the VLA model")
+    parser.add_argument("--eval", action="store_true", help="Only evaluate the model")
+    parser.add_argument("--samples", type=int, default=50, help="Number of samples for evaluation")
+    args = parser.parse_args()
+
     # --- 1. SETUP & MODEL INITIALIZATION ---
-    print(f"Training Model. Output Directory: {MODEL_DIR}")
+    print(f"Loading Model from: {MODEL_DIR}")
     
     model, processor = get_model_and_processor(MODEL_DIR)
     tokenizer = processor.tokenizer
@@ -106,6 +114,11 @@ def main():
 
     # --- 2. DATASET DEFINITION ---
     full_dataset = get_dataset(processor, tokenizer)
+
+    if args.eval:
+        print("\n=== RUNNING STANDALONE EVALUATION ===")
+        eval_model(model, processor, full_dataset, num_samples=args.samples)
+        return
 
     # --- 3. FREEZE STRATEGY ---
     model.requires_grad_(True)
@@ -151,7 +164,7 @@ def main():
         print("\n\n!!! Training interrupted by user (Ctrl+C) !!!")
 
     print("\n=== FINAL MODEL EVALUATION ===")
-    eval_model(model, processor, full_dataset, num_samples=30)
+    eval_model(model, processor, full_dataset, num_samples=args.samples)
 
     print("\n=== SAVE MODEL ===")
     trainer.save_model(MODEL_DIR)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Play script - immediately starts racing with human input.
-Run with: python3 play.py
+Play script - immediately starts racing with human input using Gym environment.
+Run with: python scripts/play.py
 
 Controls:
 - UP arrow: Accelerate
@@ -11,107 +11,91 @@ Controls:
 - ESC: Quit
 """
 
-from data.gameFiles.game import Game
 import pygame
+import argparse
+
+from vla.agents.human_agent import HumanAgent
+from vla.env import GameEnvironment
 
 
-def play():
-    # Initialize game
-    g = Game()
-    print("✓ Game initialized")
-    print("✓ Racing game starting immediately - no menus!")
-    print("\nControls:")
-    print("  UP arrow:    Accelerate")
-    print("  DOWN arrow:  Brake")
-    print("  LEFT arrow:  Steer left")
-    print("  RIGHT arrow: Steer right")
-    print("  ESC:         Quit\n")
+def play(env: GameEnvironment, max_steps: int = None):
+    print("PyRacer - Human Play Mode (Gym Environment)")
+    print("Controls: Arrow keys (UP=accel, DOWN=brake, LEFT/RIGHT=steer)")
+    print("Press ESC to quit early\n")
 
-    # Skip menus and start playing
-    g.playing = True
-    g.reset()
-    g.countdown = 0  # Skip countdown
-    print("✓ Game reset - race started immediately!")
-    print(f"✓ Initial speed: {g.map.car.speed:.2f}")
+    obs, info = env.reset()
+    total_reward = 0
+    step_count = 0
+    speed_history = []
 
-    iteration = 0
-    speed_history = []  # Track speed over time for averaging
+    running = True
+    while running:
+        keys = pygame.key.get_pressed()
 
-    # Main game loop with human input
-    while g.playing:
-        # Handle events
+        accel = 1 if keys[pygame.K_UP] else 0
+        brake = 2 if keys[pygame.K_DOWN] else 0
+        left = 4 if keys[pygame.K_LEFT] else 0
+        right = 8 if keys[pygame.K_RIGHT] else 0
+        action = accel + brake + left + right
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                g.playing = False
-                break
+                running = False
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    g.playing = False
-                    break
+                    running = False
 
-        # Get delta time
-        g.get_dt()
+        obs, reward, terminated, truncated, info = env.step(action)
+        total_reward += reward
+        step_count += 1
+        speed_history.append(info["speed"])
 
-        # Handle keyboard input - map to game actions
-        keys = pygame.key.get_pressed()
-        g.actions["accel"] = keys[pygame.K_UP]
-        g.actions["brake"] = keys[pygame.K_DOWN]
-        g.actions["left"] = keys[pygame.K_LEFT]
-        g.actions["right"] = keys[pygame.K_RIGHT]
+        if terminated or truncated:
+            break
 
-        # Update and render
-        g.update()
-        g.render()
+        if max_steps and step_count >= max_steps:
+            print(f"Max steps reached ({max_steps})")
+            break
 
-        # Track speed for averaging
-        speed_history.append(g.map.car.speed)
-
-        # Keep only last 3600 entries (60 seconds at 60 FPS)
-        if len(speed_history) > 3600:
-            speed_history.pop(0)
-
-        # Print progress every 60 iterations (1 second at 60 FPS)
-        if iteration % 60 == 0 and iteration > 0:
-            fps = g.clock.get_fps()
-
-            # Calculate average speeds
-            avg_speed_overall = (
-                sum(speed_history) / len(speed_history) if speed_history else 0
-            )
-            last_60_seconds = (
-                speed_history[-3600:] if len(speed_history) >= 3600 else speed_history
-            )
-            avg_speed_60s = (
-                sum(last_60_seconds) / len(last_60_seconds) if last_60_seconds else 0
-            )
-
+        if step_count % 60 == 0 and step_count > 0:
+            avg_speed = sum(speed_history) / len(speed_history)
             print(
-                f"  Iteration {iteration}: Speed={g.map.car.speed:.2f}, "
-                f"Avg={avg_speed_overall:.2f}, Avg60s={avg_speed_60s:.2f}, "
-                f"Time={g.total_time:.2f}s, FPS={fps:.1f}"
+                f"  Step {step_count}: Speed={info['speed']:.2f}, "
+                f"Avg={avg_speed:.2f}, Time={env.game.total_time:.2f}s"
             )
 
-        iteration += 1
-
-        # Stop after if game marks as complete
-        if g.complete:
-            g.playing = False
-
-    # Print final stats
-    print(f"\n✓ Race completed!")
-    print(f"✓ Total iterations: {iteration}")
-    print(f"✓ Final speed: {g.map.car.speed:.2f}")
-    if speed_history:
-        avg_speed_overall = sum(speed_history) / len(speed_history)
-        print(f"✓ Average speed (overall): {avg_speed_overall:.2f}")
-    print(f"✓ Total time: {g.total_time:.2f}s")
+    print(f"\nRace completed!")
+    print(f"Total steps: {step_count}")
+    print(f"Total reward: {total_reward:.2f}")
+    print(f"Average speed: {total_reward / max(step_count, 1):.2f}")
+    print(f"Final speed: {info['speed']:.2f}")
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description="Play PyRacer")
+    parser.add_argument(
+        "--max-steps", type=int, default=None, help="Maximum number of steps"
+    )
+    args = parser.parse_args()
+
+    pygame.display.init()
+    pygame.font.init()
+
+    controller = HumanAgent()
+    env = GameEnvironment(controller=controller, recorder=None)
+
     try:
-        play()
+        play(env, args.max_steps)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user")
     except Exception as e:
-        print(f"\n✗ Error: {e}")
+        print(f"Error: {e}")
         import traceback
 
         traceback.print_exc()
+    finally:
+        env.close()
+
+
+if __name__ == "__main__":
+    main()

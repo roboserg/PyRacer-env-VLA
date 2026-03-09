@@ -82,7 +82,7 @@ Result: Smooth 60 FPS + 16-32ms input latency
 
 #### 2. **Observation** (`observation.py`)
 - Encapsulates single-frame game state
-- Provides: frame surface, speed, lap, position, road status
+- Provides: frame surface, speed, position, road status
 - Tracks state changes for annotation generation
 
 #### 3. **Human Controller** (`human_controller.py`)
@@ -157,7 +157,7 @@ Stationary → Barely moving → Crawling → Slow → Moderate pace → Good sp
 "High speed, Holding right, Centered on track, Gentle curve, Room to accelerate"
 ```
 
-**Note**: All lap-related text has been removed. Track is endless with frame-by-frame timestamps instead.
+**Note**: All lap-related fields and text have been removed. Track is endless with frame-by-frame timestamps instead.
 
 ---
 
@@ -215,12 +215,12 @@ from vla import GameEnvironment, HumanController, Recorder
 recorder = Recorder(enabled=True)
 controller = HumanController()
 env = GameEnvironment(controller, recorder)
-env.run(max_laps=2)
+env.run()
 
 # Or with custom base directory (still creates timestamped subdir)
 recorder = Recorder("/my/dataset", enabled=True)
 env = GameEnvironment(controller, recorder)
-env.run(max_laps=2)
+env.run()
 ```
 
 ### Pattern 2: Bot Play (Random)
@@ -229,7 +229,7 @@ from vla import GameEnvironment, BotController
 
 controller = BotController(seed=42)
 env = GameEnvironment(controller)
-env.run(max_laps=2)
+env.run(max_steps=1000)
 ```
 
 ### Pattern 3: Bot + Recording
@@ -239,7 +239,7 @@ from vla import GameEnvironment, BotController, Recorder
 recorder = Recorder("/dataset", enabled=True)
 controller = BotController()
 env = GameEnvironment(controller, recorder)
-env.run(max_laps=3)
+env.run(max_steps=5000)
 ```
 
 ### Pattern 4: Custom Controller
@@ -249,7 +249,7 @@ from vla import Controller, Observation, GameEnvironment
 class MyCustomController(Controller):
     def get_action(self, observation: Observation) -> dict:
         # Your logic here
-        # observation provides: frame, speed, lap, position, etc.
+        # observation provides: frame, speed, position, etc.
         return {
             "accel": observation.speed < 5,
             "brake": False,
@@ -271,8 +271,6 @@ The observation passed to controllers contains:
 ```python
 observation.frame               # pygame.Surface (480x270)
 observation.speed               # float
-observation.lap                 # int
-observation.lap_time            # float (seconds)
 observation.position            # float (distance traveled)
 observation.car_x               # float (screen x)
 observation.car_y               # float (screen y)
@@ -350,9 +348,9 @@ class LearnedPolicyController(Controller):
 - Predicted track ahead
 
 ### 4. Metrics Collection
-- Lap time comparison
 - Racing line deviation
 - Collision/off-road detection
+- Average speed metrics
 
 ---
 
@@ -379,9 +377,10 @@ from vla import (
 - ✅ Default `/vla/data/recordings/` configured
 - ✅ Timestamped directories auto-created
 - ✅ No lap-related text in annotations
-- ✅ Rich 20+ text variation system
+- ✅ No lap-related fields in observations
+- ✅ Endless track support
 - ✅ JSONL metadata format working
-- ✅ Documentation complete
+- ✅ Documentation updated
 - ✅ Production-ready code
 
 ---

@@ -8,8 +8,8 @@ The bot makes random decisions from the action space.
 Run with: python3 bot_play_random.py
 """
 
-from vla.environment import GameEnvironment
-from vla.bot_controller import BotController
+from vla.env import GameEnvironment
+from vla.agents.random_agent import RandomAgent
 
 
 def main():
@@ -18,17 +18,17 @@ def main():
     print("=" * 60 + "\n")
 
     # Create random bot controller
-    controller = BotController(seed=42)
+    controller = RandomAgent(seed=42)
 
     # Create environment (no recording for this example)
     env = GameEnvironment(controller, recorder=None)
 
-    # Run for up to 2 laps
-    stats = env.run(max_laps=2)
+    # Run for a session (e.g. 1000 steps)
+    stats = env.run(max_steps=1000)
 
     print("✓ Bot race complete!")
     print(f"  Final speed: {stats['final_speed']:.2f}")
-    print(f"  Laps: {stats['laps']}")
+    print(f"  Steps: {stats['steps']}")
 
 
 if __name__ == "__main__":

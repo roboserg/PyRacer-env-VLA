@@ -3,13 +3,18 @@ Recorder module for capturing game frames and metadata.
 Saves frames as JPEG images and metadata as JSONL format.
 """
 
+from __future__ import annotations
+
 import os
 import json
 import pygame
 import time
 from datetime import datetime
 from pathlib import Path
-from vla.observation import Observation
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from vla.env import Observation
 
 # Default recording directory (relative to project root)
 DEFAULT_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -47,7 +52,13 @@ class Recorder:
             self.images_dir.mkdir(parents=True, exist_ok=True)
             print(f"✓ Recorder initialized: {self.output_dir}")
 
-    def record_frame(self, observation: Observation, action: dict, text: str = "", frame_idx: int = None) -> None:
+    def record_frame(
+        self,
+        observation: Observation,
+        action: dict,
+        text: str = "",
+        frame_idx: int = None,
+    ) -> None:
         """
         Record a single frame with action and annotation.
 
@@ -68,7 +79,7 @@ class Recorder:
 
         # Increment internal count of saved frames
         self.recorded_count = getattr(self, "recorded_count", 0) + 1
-        
+
         # Use provided frame_idx or fall back to sequential count
         save_idx = frame_idx if frame_idx is not None else self.recorded_count
 
@@ -126,7 +137,9 @@ class Recorder:
                 json.dump(entry, f)
                 f.write("\n")
 
-        print(f"\n✓ Saved {len(self.metadata_entries)} metadata entries to {metadata_path}")
+        print(
+            f"\n✓ Saved {len(self.metadata_entries)} metadata entries to {metadata_path}"
+        )
         print(f"✓ Total frames recorded: {self.frame_count}")
         print(f"✓ Dataset location: {self.output_dir}")
 

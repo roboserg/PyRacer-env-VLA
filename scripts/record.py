@@ -15,8 +15,8 @@ Controls:
 - ESC:         Quit
 """
 
-from vla.environment import GameEnvironment
-from vla.human_controller import HumanController
+from vla.env import GameEnvironment
+from vla.agents.human_agent import HumanAgent
 from vla.recorder import Recorder
 
 
@@ -35,7 +35,7 @@ def main():
     recorder = Recorder(enabled=True)
 
     # Create human controller
-    controller = HumanController()
+    controller = HumanAgent()
 
     # Create environment
     env = GameEnvironment(controller, recorder)
