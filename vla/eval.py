@@ -1,61 +1,49 @@
-#!/usr/bin/env python3
-"""
-Eval script - runs the game with a trained VLA model.
-Run with: python vla/eval.py
-
-This loads the model from ./smolvla-racer-final and uses VLAController
-to play the game autonomously.
-"""
-
+import argparse
 import torch
 import sys
-import pygame
-from vla.vla_controller import VLAController
-from vla.environment import GameEnvironment
 from vla.model import get_model_and_processor
-from vla.train import MODEL_DIR
+from vla.train import MODEL_DIR, get_dataset, eval_model
 
-pygame.init()
-pygame.mixer.init()
+def main():
+    parser = argparse.ArgumentParser(description="Evaluate a trained VLA model on dataset samples.")
+    parser.add_argument(
+        "--num_samples", 
+        type=int, 
+        default=50, 
+        help="Number of samples to run for accuracy calculation (default: 50)"
+    )
+    parser.add_argument(
+        "--model_path", 
+        type=str, 
+        default=MODEL_DIR, 
+        help=f"Path to the model to evaluate (default: {MODEL_DIR})"
+    )
+    args = parser.parse_args()
 
-def eval():
-    """Run evaluation with the trained VLA model."""
-    print("=" * 60)
-    print("PyRacer VLA Evaluation")
-    print("=" * 60)
-    print(f"Model directory: {MODEL_DIR}")
+    # 1. Load Model & Processor
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
-
+    print(f"Loading Model from: {args.model_path}")
+    
     try:
-        model, processor = get_model_and_processor(MODEL_DIR)
+        model, processor = get_model_and_processor(args.model_path)
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
-        print("Please train the model first with: python vla/train.py")
         sys.exit(1)
 
-    controller = VLAController(
-        model=model, processor=processor, device=device, max_length=128
-    )
+    # 2. Load Dataset
+    print("\nLoading Dataset...")
+    dataset = get_dataset(processor, processor.tokenizer)
 
-    print(f"\nStarting game with {controller.__class__.__name__}...")
-    print("Press ESC to quit early\n")
-
-    env = GameEnvironment(controller=controller, recorder=None)
-
-    stats = env.run(max_laps=2, verbose=True)
-
-    print("\nEvaluation complete!")
-    return stats
-
+    # 3. Run Evaluation
+    print(f"\nRunning Evaluation on {args.num_samples} random samples...")
+    eval_model(model, processor, dataset, num_samples=args.num_samples)
 
 if __name__ == "__main__":
     try:
-        eval()
+        main()
     except KeyboardInterrupt:
-        print("\n\nEvaluation interrupted by user")
+        print("\nEvaluation interrupted by user.")
     except Exception as e:
-        print(f"\nERROR: {e}")
+        print(f"\nCRITICAL ERROR: {e}")
         import traceback
-
         traceback.print_exc()
