@@ -15,8 +15,6 @@ class Map:
         self.track_curvature = 0
         self.track_length = 0
         self.load_track()
-        self.lap, self.counted = 0, True
-        self.lap_times = []
         self.background_img = pygame.image.load(
             os.path.join(self.game.img_dir, "background.png")
         ).convert()
@@ -41,9 +39,6 @@ class Map:
         # Update the car
         self.car.update()
         self.update_track()
-        if self.lap > 2:
-            self.lap = 2
-            self.game.complete = True
 
     def update_track(self):
         track_section, offset = 0, 0
@@ -66,14 +61,6 @@ class Map:
         self.curvature += track_curve_diff
 
         self.track_curvature += self.curvature * self.game.dt * self.car.speed
-
-        if track_section == 1 and not self.counted:
-            self.store_times()
-            self.counted = True
-            self.lap += 1
-
-        if track_section > 1:
-            self.counted = False
 
     def draw_map(self):
 
@@ -185,7 +172,7 @@ class Map:
             30,
         )
         self.game.draw_text(
-            "Time: " + str(round(self.game.lap_time, 2)), 20, (255, 255, 255), 10, 50
+            "Time: " + str(round(self.game.total_time, 2)), 20, (255, 255, 255), 10, 50
         )
 
         # Draw Action Arrows
@@ -195,17 +182,6 @@ class Map:
             self.game.draw_text(
                 "FINISHED", 20, (255, 255, 255), self.mid_w - 10, self.mid_h
             )
-
-        i = 0
-        for lap in self.lap_times:
-            self.game.draw_text(
-                "Lap " + str(i + 1) + ": " + str(round(lap, 2)),
-                20,
-                (255, 255, 255),
-                self.game.DISPLAY_W - 100,
-                10 + (20 * i),
-            )
-            i += 1
 
     def draw_action_arrows(self):
         base_x, base_y = 10, 80
@@ -243,10 +219,3 @@ class Map:
     def update_track_generation(self, car_distance):
         if car_distance > self.track_length - 1000:
             self.generate_track_segments(10)
-
-    def store_times(self):
-        if self.lap_times:
-            current_time = self.game.lap_time - sum(self.lap_times)
-        else:
-            current_time = self.game.lap_time
-        self.lap_times.append(current_time)

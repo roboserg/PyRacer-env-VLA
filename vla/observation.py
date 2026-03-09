@@ -9,13 +9,11 @@ import pygame
 class Observation:
     """Represents a single observation from the game environment."""
 
-    def __init__(self, frame, speed, lap, lap_time, position, car_x, car_y, map_obj):
+    def __init__(self, frame, speed, position, car_x, car_y, map_obj):
         """
         Args:
             frame: pygame.Surface of the game display
             speed: float, current car speed
-            lap: int, current lap number
-            lap_time: float, time in current lap
             position: tuple (x, y), car position relative to start
             car_x: float, car x-coordinate on screen
             car_y: float, car y-coordinate on screen
@@ -23,8 +21,6 @@ class Observation:
         """
         self.frame = frame  # pygame.Surface (480x270)
         self.speed = speed
-        self.lap = lap
-        self.lap_time = lap_time
         self.position = position
         self.car_x = car_x
         self.car_y = car_y
@@ -46,8 +42,6 @@ class Observation:
         """Convert observation to dict for logging."""
         return {
             "speed": round(self.speed, 2),
-            "lap": self.lap,
-            "lap_time": round(self.lap_time, 2),
             "position": self.position,
             "car_x": round(self.car_x, 2),
             "car_y": round(self.car_y, 2),
@@ -62,12 +56,10 @@ class Observation:
 
         # Consider state changed if:
         # - Speed changed by more than 0.5
-        # - Lap changed
         # - On-road status changed
         # - Position changed significantly
         speed_delta = abs(self.speed - prev_obs.speed)
-        lap_changed = self.lap != prev_obs.lap
         road_status_changed = self.on_road != prev_obs.on_road
         pos_delta = abs(self.car_offset_from_center - prev_obs.car_offset_from_center)
 
-        return speed_delta > 0.5 or lap_changed or road_status_changed or pos_delta > 10
+        return speed_delta > 0.5 or road_status_changed or pos_delta > 10

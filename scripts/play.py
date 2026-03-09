@@ -88,13 +88,13 @@ def play():
             print(
                 f"  Iteration {iteration}: Speed={g.map.car.speed:.2f}, "
                 f"Avg={avg_speed_overall:.2f}, Avg60s={avg_speed_60s:.2f}, "
-                f"Lap={g.map.lap}, Time={g.lap_time:.2f}s, FPS={fps:.1f}"
+                f"Time={g.total_time:.2f}s, FPS={fps:.1f}"
             )
 
         iteration += 1
 
-        # Stop after 3 laps or if game marks as complete
-        if g.map.lap >= 2 or g.complete:
+        # Stop after if game marks as complete
+        if g.complete:
             g.playing = False
 
     # Print final stats
@@ -104,10 +104,7 @@ def play():
     if speed_history:
         avg_speed_overall = sum(speed_history) / len(speed_history)
         print(f"✓ Average speed (overall): {avg_speed_overall:.2f}")
-    print(f"✓ Final lap time: {g.lap_time:.2f}s")
-    print(f"✓ Laps completed: {g.map.lap}")
-    if g.map.lap_times:
-        print(f"✓ Lap times: {[round(t, 2) for t in g.map.lap_times]}")
+    print(f"✓ Total time: {g.total_time:.2f}s")
 
 
 if __name__ == "__main__":

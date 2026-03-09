@@ -40,8 +40,8 @@ def main():
     # Create environment
     env = GameEnvironment(controller, recorder)
 
-    # Run for up to 2 laps
-    stats = env.run(max_laps=2)
+    # Run for a session (stop with ESC)
+    stats = env.run()
 
     print("\n✓ Session complete!")
 
