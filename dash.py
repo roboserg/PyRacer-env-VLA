@@ -30,11 +30,10 @@ SPIKE_Y = [
     LEVEL_2_Y - SPIKE_SIZE,   # lane 2 = L2 platform
 ]
 
-BASE_SPEED = 6
-MAX_SPEED  = 13
+SPEED = 6
 
 # No obstacles for first SAFE_ZONE px of a chunk (player onboarding / reaction)
-SAFE_ZONE = 100
+SAFE_ZONE = 120
 
 
 # ── Player ────────────────────────────────────────────────────────────────────
@@ -146,9 +145,11 @@ class Spike:
 #   • Ground player stays on ground.
 #   This makes gaps natural level-transition zones without any special logic.
 #
-# Speed increases with score, capped at MAX_SPEED.
-
-def build_chunk(start_x):
+def build_chunk(start_x, easy=False):
+    """
+    easy=False (normal): 1 lane red-blocked, 1 lane orange-partial, 1 lane clear.
+    easy=True:           1 lane red-blocked, 2 lanes fully clear.
+    """
     plats, spikes = [], []
 
     x         = start_x + SAFE_ZONE
@@ -156,7 +157,7 @@ def build_chunk(start_x):
     blocked   = random.randint(0, 2)
 
     while x < chunk_end - 20:
-        sec_len = random.randint(90, 200)
+        sec_len = random.randint(80, 160)
         sec_end = min(x + sec_len, chunk_end - 20)
         sec_w   = sec_end - x
 
@@ -164,32 +165,26 @@ def build_chunk(start_x):
         plats.append(Platform(x, LEVEL_1_Y, sec_w))
         plats.append(Platform(x, LEVEL_2_Y, sec_w))
 
-        # Pick partial (orange) and clear lane
-        others  = [l for l in range(3) if l != blocked]
-        random.shuffle(others)
-        partial = others[0]
-        # others[1] is the completely clear lane
-
         # Dense red spikes — wall across the full section length
         dense_step = SPIKE_SIZE + random.randint(3, 8)
-        xi = x + 10   # tiny entry margin
+        xi = x + 10
         while xi + SPIKE_SIZE <= sec_end:
             spikes.append(Spike(xi, SPIKE_Y[blocked], color=RED))
             xi += dense_step
 
-        # Sparse orange spikes — spaced ~90-120 px so each one is individually
-        # jumpable; player can stay on this lane by hopping over them.
-        sparse_step = SPIKE_SIZE + random.randint(60, 90)
-        xi = x + random.randint(25, 50)   # randomised start offset
-        while xi + SPIKE_SIZE <= sec_end:
-            spikes.append(Spike(xi, SPIKE_Y[partial], color=ORANGE))
-            xi += sparse_step
+        # Normal mode only: sparse orange spikes on a second lane.
+        # Spaced ~110-150 px apart so each is individually jumpable.
+        if not easy:
+            others      = [l for l in range(3) if l != blocked]
+            partial     = random.choice(others)
+            sparse_step = SPIKE_SIZE + random.randint(80, 120)
+            xi          = x + random.randint(30, 60)
+            while xi + SPIKE_SIZE <= sec_end:
+                spikes.append(Spike(xi, SPIKE_Y[partial], color=ORANGE))
+                xi += sparse_step
 
-        # Gap between sections: no platforms, no spikes.
-        # Physics: in ~10 frames of free-fall an L1 player descends ~30 px,
-        # dropping below the next section's L1 platform and landing on ground.
-        # An L2 player descends ~30 px, still above L1, landing on next L1.
-        gap = random.randint(55, 80)
+        # Gap between sections: no platforms, no spikes (lane-transition zone)
+        gap = random.randint(70, 100)
         x   = sec_end + gap
 
         # Change blocked lane with 60 % probability
@@ -212,8 +207,35 @@ def main():
 
     state = {}
 
+    # ── Mode selection screen ─────────────────────────────────────────────────
+    easy = None
+    title_font = pygame.font.SysFont("Arial", 28, bold=True)
+    while easy is None:
+        clock.tick(FPS)
+        screen.fill(BLACK)
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_1:
+                    easy = True
+                elif ev.key == pygame.K_2:
+                    easy = False
+
+        lines = [
+            ("INFINITE DASH", WHITE, 130),
+            ("Select mode:", GRAY,   185),
+            ("[1]  EASY   — 1 blocked lane, 2 clear lanes", CYAN,   225),
+            ("[2]  NORMAL — 1 blocked lane, 1 clear, 1 with jumpable spikes", ORANGE, 260),
+        ]
+        for text, color, y in lines:
+            surf = sfont.render(text, True, color) if y > 200 else title_font.render(text, True, color)
+            screen.blit(surf, (SCREEN_WIDTH // 2 - surf.get_width() // 2, y))
+        pygame.display.flip()
+
+    # ── Game state ────────────────────────────────────────────────────────────
     def spawn():
-        p, s = build_chunk(state["next_x"])
+        p, s = build_chunk(state["next_x"], easy=easy)
         state["plats"].extend(p)
         state["spikes"].extend(s)
         state["next_x"] += 520 + random.randint(60, 130)
@@ -252,8 +274,7 @@ def main():
 
         if not dead:
             score = (pygame.time.get_ticks() - state["score_t"]) // 100
-            speed = min(BASE_SPEED + score // 25, MAX_SPEED)
-            state["scroll"] += speed
+            state["scroll"] += SPEED
             sc = state["scroll"]
 
             if state["next_x"] - sc < SCREEN_WIDTH + 500:
@@ -273,7 +294,6 @@ def main():
                     break
         else:
             score = 0
-            speed = 0
 
         # Level-zone shading (subtle background bands)
         pygame.draw.rect(screen, (18, 22, 40),
@@ -294,7 +314,8 @@ def main():
             p.draw(screen)
 
         if not dead:
-            screen.blit(font.render(f"SCORE: {score}  SPD: {speed}", True, WHITE),
+            mode_label = "EASY" if easy else "NORMAL"
+            screen.blit(font.render(f"SCORE: {score}  [{mode_label}]", True, WHITE),
                         (20, 14))
             screen.blit(sfont.render("L2", True, (80, 80, 130)), (6, LEVEL_2_Y - 14))
             screen.blit(sfont.render("L1", True, (80, 80, 130)), (6, LEVEL_1_Y - 14))

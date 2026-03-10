@@ -54,6 +54,7 @@ class Car():
         
         # Particle systems
         self.dirt_particles = []
+        self.brake_particles = []
 
     def get_current_scaled_image(self, name, current_h):
         """Helper to scale a sprite based on current target height"""
@@ -116,6 +117,7 @@ class Car():
         
         # Update particles
         self.update_dirt()
+        self.update_brake_particles()
 
     def spawn_dirt(self, steer_diff):
         import random
@@ -136,6 +138,32 @@ class Car():
             }
             self.dirt_particles.append(p)
 
+    def update_brake_particles(self):
+        import random
+        if self.game.actions['brake'] and self.speed > 0.15:
+            img_w = self.image.get_width()
+            img_h = self.image.get_height()
+            base_y = self.current_draw_y + img_h - 5
+            for wheel_x_frac in (0.25, 0.75):
+                c = random.randint(180, 220)
+                p = {
+                    "x": self.position_int + img_w * wheel_x_frac + random.uniform(-4, 4),
+                    "y": base_y,
+                    "vx": random.uniform(-0.5, 0.5),
+                    "vy": random.uniform(-1.5, -0.5),
+                    "life": 1.0,
+                    "size": random.randint(4, 7),
+                    "color": (c, c, c),
+                }
+                self.brake_particles.append(p)
+
+        for p in self.brake_particles[:]:
+            p["x"] += p["vx"]
+            p["y"] += p["vy"]
+            p["life"] -= self.game.dt * 1.2
+            if p["life"] <= 0:
+                self.brake_particles.remove(p)
+
     def update_dirt(self):
         for p in self.dirt_particles[:]:
             # Screen-space physics: move down and slightly horizontally
@@ -155,6 +183,14 @@ class Car():
             s = pygame.Surface((size, size), pygame.SRCALPHA)
             s.fill((*p["color"], alpha))
             self.game.display.blit(s, (p["x"], p["y"]))
+
+    def draw_brake_particles(self):
+        for p in self.brake_particles:
+            alpha = int(p["life"] * 200)
+            size = int(p["size"] * (1.0 + (1.0 - p["life"]) * 0.3))
+            s = pygame.Surface((size, size), pygame.SRCALPHA)
+            s.fill((*p["color"], alpha))
+            self.game.display.blit(s, (int(p["x"]), int(p["y"])))
 
     def draw(self):
         # Vertical position first — needed to derive perspective depth for sizing
@@ -206,7 +242,8 @@ class Car():
         self.position_int = max(0, min(self.position_int, self.game.DISPLAY_W - img_w))
         self.current_draw_y = max(0, min(raw_draw_y, self.game.DISPLAY_H - img_h))
         
-        # Draw dirt BEFORE car
+        # Draw particles BEFORE car
         self.draw_dirt()
+        self.draw_brake_particles()
         
         self.game.display.blit(self.image, (self.position_int, self.current_draw_y))
