@@ -1,6 +1,6 @@
 models/
 __pycache__/
-vla/data/
+recordings/
 CLAUDE.md
 AGENTS.md
 GEMINI.md

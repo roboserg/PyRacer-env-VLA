@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from vla.env import Observation
 
 # Default recording directory (relative to project root)
-DEFAULT_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+DEFAULT_RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
 
 
 class Recorder:
@@ -28,12 +28,12 @@ class Recorder:
         Initialize recorder.
 
         Args:
-            output_dir: Base path where recordings are saved
-                       Defaults to /vla/data/recordings/
+            output_dir: Base path where recordings are saved.
+                       Defaults to recordings/ at project root.
             enabled: Whether recording is active
         """
         if output_dir is None:
-            output_dir = os.path.join(DEFAULT_DATA_DIR, "recordings")
+            output_dir = DEFAULT_RECORDINGS_DIR
 
         self.enabled = enabled
         self.frame_count = 0

@@ -31,7 +31,7 @@ def main():
     print("  RIGHT arrow: Steer right")
     print("  ESC:         Quit\n")
 
-    # Create recorder (saves to /vla/data/ by default)
+    # Create recorder (saves to recordings/ at project root by default)
     recorder = Recorder(enabled=True)
 
     # Create human agent

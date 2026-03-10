@@ -19,7 +19,7 @@ class HumanAgent(Agent):
 
     def predict(
         self,
-        observation: "Observation",
+        observation: Observation,
         state: Optional[Tuple[Any, ...]] = None,
         episode_start: Optional[Any] = None,
         deterministic: bool = False,

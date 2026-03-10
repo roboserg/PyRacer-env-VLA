@@ -16,7 +16,7 @@ from vla.model import get_model_and_processor, infer, post_process_output
 torch.set_float32_matmul_precision("high")
 
 MODEL_DIR = "./models/2_new_gameplay"
-DATASET_DIR = "vla/data/recordings"
+DATASET_DIR = "recordings"
 
 def get_dataset(processor, tokenizer):
     """Identifies the latest recording and returns a RacingVLADataset."""
