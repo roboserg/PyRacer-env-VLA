@@ -214,7 +214,7 @@ class Map:
             )
 
     def draw_action_arrows(self):
-        base_x, base_y = 10, 80
+        base_x, base_y = 415, 10
         size = 15
         spacing = 20
         actions = self.game.actions

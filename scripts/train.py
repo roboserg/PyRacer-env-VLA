@@ -10,8 +10,8 @@ from transformers import (
     DataCollatorForSeq2Seq,
 )
 from tqdm import tqdm
-from vla.dataset import RacingVLADataset
-from vla.model import get_model_and_processor, infer, post_process_output
+from src.vla.dataset import RacingVLADataset
+from src.vla.model import get_model_and_processor, infer, post_process_output
 
 torch.set_float32_matmul_precision("high")
 
@@ -52,10 +52,10 @@ def eval_model(model, processor, dataset, num_samples=10):
 
         # Ground Truth Action [accel, brake, left, right]
         gt_action_vec = item["action"]
-        
+
         # Predicted action
         pred_action = post_process_output(response)
-        
+
         # Compare exactly
         match = (
             bool(gt_action_vec[0]) == pred_action["accel"] and
@@ -105,7 +105,7 @@ def main():
 
     # --- 1. SETUP & MODEL INITIALIZATION ---
     print(f"Loading Model from: {MODEL_DIR}")
-    
+
     model, processor = get_model_and_processor(MODEL_DIR)
     tokenizer = processor.tokenizer
 
