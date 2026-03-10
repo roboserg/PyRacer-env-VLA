@@ -3,10 +3,6 @@ import pygame, time, os
 from data.gameFiles.map import Map
 from data.util.controls import load_controls
 from data.util.fps import FPS
-from data.menus.main_menu import MainMenu
-from data.menus.credits_menu import CreditsMenu
-from data.menus.options_menu import OptionsMenu
-from data.menus.controls_menu import ControlsMenu
 
 
 class Game:
@@ -36,7 +32,6 @@ class Game:
         )  # Argument in FPS class will cap the FPS at the given value
         self.dt = 0
         self.load_controls()
-        self.load_menus()
         self.load_images()
 
         # Resets any logic that needs to be reset after every game loop
@@ -55,6 +50,7 @@ class Game:
 
     # Main Game Loop. Starts by resetting the game, and then loops until playing is set to false
     def game_loop(self):
+        self.playing = True
         self.reset()
         while self.playing:
             self.get_dt()
@@ -71,12 +67,10 @@ class Game:
             if event.type == pygame.QUIT:
                 self.playing = False
                 self.running = False
-                self.current_menu.run_display = False
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.playing = False
                     self.running = False
-                    self.current_menu.run_display = False
                 if event.key == self.controls["Left"]:
                     self.actions["left"] = True
                 if event.key == self.controls["Right"]:
@@ -162,15 +156,6 @@ class Game:
         pygame.display.set_caption(
             "{0}: {1:.2f}".format(self.TITLE, self.clock.get_fps())
         )
-
-    # Loads all menu classes
-    def load_menus(self):
-        self.main_menu = MainMenu(self)
-        self.credits_menu = CreditsMenu(self)
-        self.options_menu = OptionsMenu(self)
-        self.controls_menu = ControlsMenu(self)
-        self.current_menu = self.main_menu
-        self.font = pygame.font.Font(self.main_menu.font_name, 16)
 
     def load_controls(self):
         self.controls = load_controls(
