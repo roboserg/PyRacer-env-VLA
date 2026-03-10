@@ -22,7 +22,7 @@ DEFAULT_RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.di
 class Recorder:
     """Records game frames and actions as a dataset."""
 
-    def __init__(self, output_dir: str = None, enabled: bool = True):
+    def __init__(self, output_dir: str = None, enabled: bool = True, suffix: str = None):
         """
         Initialize recorder.
 
@@ -46,7 +46,8 @@ class Recorder:
         if self.enabled:
             # Create timestamped recording directory
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.output_dir = Path(output_dir) / timestamp
+            dirname = f"{timestamp}-{suffix}" if suffix else timestamp
+            self.output_dir = Path(output_dir) / dirname
             self.images_dir = self.output_dir / "images"
             self.images_dir.mkdir(parents=True, exist_ok=True)
             print(f"✓ Recorder initialized: {self.output_dir}")

@@ -37,9 +37,6 @@ class GameEnvironment(gym.Env):
         self.frame_count = 0
         self.iteration_count = 0
 
-        self._step_count = 0
-        self._max_steps = 5000
-
     def _create_observation(self) -> Observation:
         """Create observation object from current game state."""
         surface = self.game.display
@@ -96,7 +93,6 @@ class GameEnvironment(gym.Env):
         self.game.playing = True
         self.game.reset()
 
-        self._step_count = 0
         self.frame_count = 0
         self.iteration_count = 0
 
@@ -121,7 +117,6 @@ class GameEnvironment(gym.Env):
             info: Additional info dict
         """
         self.iteration_count += 1
-        self._step_count += 1
 
         if isinstance(action, (int, np.integer)):
             action_dict = self._decode_action(int(action))
@@ -162,7 +157,7 @@ class GameEnvironment(gym.Env):
         reward = float(car.speed) + off_road_penalty
 
         terminated = False
-        truncated = self._step_count >= self._max_steps
+        truncated = False
 
         info = {
             "should_quit": not self.game.playing,

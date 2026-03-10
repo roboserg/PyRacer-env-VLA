@@ -5,6 +5,7 @@ Eval script. Runs a bot or trained VLA model on the game.
 Usage:
     python scripts/eval.py                          # VLA agent, default model dir
     python scripts/eval.py --agent bot              # rule-based bot baseline
+    python scripts/eval.py --agent bot --record     # bot play + record dataset
     python scripts/eval.py --model-dir models/foo   # specify model for VLA
     python scripts/eval.py --max-steps 1000
 """
@@ -13,6 +14,7 @@ import argparse
 import pygame
 
 from src.gym.env import GameEnvironment
+from src.gym.recorder import Recorder
 
 
 def main():
@@ -20,6 +22,7 @@ def main():
     parser.add_argument("--agent", choices=["vla", "bot"], default="vla", help="Agent type")
     parser.add_argument("--model-dir", default="./models", help="Model directory (VLA only)")
     parser.add_argument("--max-steps", type=int, default=None, help="Maximum number of steps")
+    parser.add_argument("--record", action="store_true", help="Record gameplay to dataset")
     args = parser.parse_args()
 
     pygame.display.init()
@@ -34,7 +37,8 @@ def main():
         from src.gym.agents.bot_agent import BotAgent
         agent = BotAgent()
 
-    env = GameEnvironment()
+    recorder = Recorder(enabled=True, suffix=args.agent) if args.record else None
+    env = GameEnvironment(recorder=recorder)
 
     try:
         env.reset()
