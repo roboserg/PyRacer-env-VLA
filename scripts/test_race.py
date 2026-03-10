@@ -10,7 +10,7 @@ import sys
 
 class TestAgent(Agent):
     """
-    A simple controller for testing that accelerates and steers left/right periodically.
+    A simple agent for testing that accelerates and steers left/right periodically.
     Replicates the original logic from the non-Gym test script.
     """
 
@@ -70,10 +70,10 @@ class TestAgent(Agent):
 
 
 def test_race():
-    # Initialize environment with our test controller
-    controller = TestAgent()
-    env = GameEnvironment(controller=controller, recorder=None)
-    print("✓ Gym Environment initialized with TestController")
+    # Initialize environment with our test agent
+    agent = TestAgent()
+    env = GameEnvironment(agent=agent, recorder=None)
+    print("✓ Gym Environment initialized with TestAgent")
 
     # Run the environment for 600 steps (~10 seconds at 60 FPS)
     print("✓ Starting race test (running for 600 steps)...")

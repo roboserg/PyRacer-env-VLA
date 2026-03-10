@@ -95,13 +95,14 @@ class RacingVLADataset(Dataset):
             action_tokens.append(f"<{self.action_map[i]}_{state}>")
         action_str = " ".join(action_tokens)
 
-        # --- 3. BUILD CONVERSATION (Strict Action) ---
+        # --- 3. BUILD CONVERSATION (Annotation-grounded Action) ---
+        prompt_text_content = f"{thought_text} → Action:"
         messages = [
             {
                 "role": "user",
                 "content": [
                     {"type": "image"},
-                    {"type": "text", "text": "Action:"},
+                    {"type": "text", "text": prompt_text_content},
                 ],
             },
             {

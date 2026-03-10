@@ -34,11 +34,11 @@ def main():
     # Create recorder (saves to /vla/data/ by default)
     recorder = Recorder(enabled=True)
 
-    # Create human controller
-    controller = HumanAgent()
+    # Create human agent
+    agent = HumanAgent()
 
     # Create environment
-    env = GameEnvironment(controller, recorder)
+    env = GameEnvironment(agent, recorder)
 
     # Run for a session (stop with ESC)
     stats = env.run()

@@ -3,8 +3,8 @@ from vla.env import GameEnvironment
 from vla.agents.bot_agent import BotAgent
 
 def main():
-    controller = BotAgent()
-    env = GameEnvironment(controller, recorder=None)
+    agent = BotAgent()
+    env = GameEnvironment(agent, recorder=None)
     stats = env.run()
     print(f"Final speed: {stats['final_speed']:.2f}, Steps: {stats['steps']}")
 

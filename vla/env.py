@@ -17,7 +17,7 @@ from vla.observation import Observation
 
 
 class GameEnvironment(gym.Env):
-    """Main game environment that coordinates game, controller, and recording."""
+    """Main game environment that coordinates game, agent, and recording."""
 
     metadata = {"render_modes": ["human"]}
 
@@ -26,26 +26,28 @@ class GameEnvironment(gym.Env):
     observation_space = spaces.Dict(
         {
             "image": spaces.Box(0, 255, (270, 480, 3), dtype=np.uint8),
-            "speed": spaces.Box(-np.inf, np.inf, (1,), dtype=np.float32),
+            "speed": spaces.Box(0.0, 1.5, (1,), dtype=np.float32),
+            "offset": spaces.Box(-240.0, 240.0, (1,), dtype=np.float32),
+            "on_road": spaces.Box(0.0, 1.0, (1,), dtype=np.float32),
         }
     )
 
-    def __init__(self, controller: Agent, recorder: Optional[Recorder] = None):
+    def __init__(self, agent: Agent, recorder: Optional[Recorder] = None):
         """
         Initialize game environment.
 
         Args:
-            controller: Agent instance (HumanAgent, BotAgent, etc.)
+            agent: Agent instance (HumanAgent, BotAgent, etc.)
             recorder: Optional Recorder instance for data collection
         """
         super().__init__()
         self.game = Game()
-        self.controller = controller
+        self.agent = agent
         self.recorder = recorder
 
-        # Link controller to this environment (SB3 style)
-        if self.controller:
-            self.controller.env = self
+        # Link agent to this environment (SB3 style)
+        if self.agent:
+            self.agent.env = self
 
         self.current_observation = None
 
@@ -88,9 +90,13 @@ class GameEnvironment(gym.Env):
         )
         image_array = np.array(pil_image, dtype=np.uint8)
 
-        speed = np.array([self.game.map.car.speed], dtype=np.float32)
+        car = self.game.map.car
+        car_offset = car.position_int - 240
+        speed = np.array([car.speed], dtype=np.float32)
+        offset = np.array([car_offset], dtype=np.float32)
+        on_road = np.array([1.0 if abs(car_offset) < 80 else 0.0], dtype=np.float32)
 
-        return {"image": image_array, "speed": speed}
+        return {"image": image_array, "speed": speed, "offset": offset, "on_road": on_road}
 
     def _decode_action(self, action: int) -> Dict[str, bool]:
         """Decode discrete action (0-15) to 4 boolean actions."""
@@ -122,7 +128,7 @@ class GameEnvironment(gym.Env):
 
         self.game.playing = True
         self.game.reset()
-        self.controller.reset()
+        self.agent.reset()
 
         self._step_count = 0
         self._zero_speed_counter = 0
@@ -187,9 +193,12 @@ class GameEnvironment(gym.Env):
                 self.current_observation, action_dict, frame_idx=self.frame_count
             )
 
-        reward = float(self.game.map.car.speed)
+        car = self.game.map.car
+        off_road_penalty = -0.5 if not self.current_observation.on_road else 0.0
+        reward = float(car.speed) + off_road_penalty
 
-        terminated = self.game.complete
+        # Endless track has no natural end; terminated is always False
+        terminated = False
 
         if self.game.map.car.speed < 0.1:
             self._zero_speed_counter += 1
@@ -201,7 +210,7 @@ class GameEnvironment(gym.Env):
         )
 
         info = {
-            "should_quit": self.controller.should_quit,
+            "should_quit": self.agent.should_quit,
             "speed": self.game.map.car.speed,
         }
 
@@ -223,13 +232,13 @@ class GameEnvironment(gym.Env):
         if verbose:
             print(f"\n{'=' * 60}")
             print(f"Starting game environment (Synchronous Mode)")
-            print(f"Controller: {self.controller.__class__.__name__}")
+            print(f"Agent: {self.agent.__class__.__name__}")
             print(f"Recording: {self.recorder is not None}")
             print(f"{'=' * 60}\n")
 
         self.game.playing = True
         self.game.reset()
-        self.controller.reset()
+        self.agent.reset()
 
         self.current_observation = self._create_observation()
 
@@ -239,8 +248,8 @@ class GameEnvironment(gym.Env):
             print_interval = 10
 
             while self.game.playing:
-                # Get action from controller (blocking) - SB3 style predict
-                action, state = self.controller.predict(
+                # Get action from agent (blocking) - SB3 style predict
+                action, state = self.agent.predict(
                     self.current_observation, state=state
                 )
 
@@ -283,7 +292,7 @@ class GameEnvironment(gym.Env):
                     )
 
                 info = {
-                    "should_quit": self.controller.should_quit,
+                    "should_quit": self.agent.should_quit,
                     "speed": self.game.map.car.speed,
                 }
 

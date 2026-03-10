@@ -17,11 +17,11 @@ def main():
     print("PyRacer - Bot Play (Random Agent)")
     print("=" * 60 + "\n")
 
-    # Create random bot controller
-    controller = RandomAgent(seed=42)
+    # Create random bot agent
+    agent = RandomAgent(seed=42)
 
     # Create environment (no recording for this example)
-    env = GameEnvironment(controller, recorder=None)
+    env = GameEnvironment(agent, recorder=None)
 
     # Run for a session (e.g. 1000 steps)
     stats = env.run(max_steps=1000)

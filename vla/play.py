@@ -77,8 +77,8 @@ def main():
     pygame.display.init()
     pygame.font.init()
 
-    controller = HumanAgent()
-    env = GameEnvironment(controller=controller, recorder=None)
+    agent = HumanAgent()
+    env = GameEnvironment(agent=agent, recorder=None)
 
     try:
         play(env, args.max_steps)
