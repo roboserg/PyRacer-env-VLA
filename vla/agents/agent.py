@@ -5,10 +5,8 @@ Adheres to StableBaselines3-like 'predict' interface.
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from vla.env import Observation
+from typing import Optional, Tuple, Any
+from vla.observation import Observation
 
 
 class Agent(ABC):

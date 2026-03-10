@@ -5,12 +5,10 @@ Uses pygame.key.get_pressed() for non-blocking input.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Any, Dict, TYPE_CHECKING
+from typing import Optional, Tuple, Any, Dict
 import pygame
 from vla.agents.agent import Agent
-
-if TYPE_CHECKING:
-    from vla.env import Observation
+from vla.observation import Observation
 
 
 class HumanAgent(Agent):

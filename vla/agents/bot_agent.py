@@ -6,7 +6,7 @@ Uses observation data to make decisions: stays on road, accelerates, steers by o
 from typing import Optional, Tuple, Any, Dict
 import pygame
 from vla.agents.agent import Agent
-from vla.env import Observation
+from vla.observation import Observation
 
 # How far from center (px) before corrective steering kicks in
 STEER_THRESHOLD = 15

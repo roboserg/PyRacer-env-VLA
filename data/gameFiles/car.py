@@ -157,40 +157,54 @@ class Car():
             self.game.display.blit(s, (p["x"], p["y"]))
 
     def draw(self):
-        # Determine current target height based on speed (perspective)
-        current_h = int(self.base_h * (1.0 - (self.speed * 0.20)))
+        # Vertical position first — needed to derive perspective depth for sizing
+        forward_offset = int(self.speed * 44)
+        self.current_draw_y = self.base_y - forward_offset
 
         # Determine which sprite name to use
         actions = self.game.actions
-        sprite_name = "straight"
-
         if actions.get("left") and self.steer_timer > self.slight_steer_threshold:
             sprite_name = "hard_left" if self.steer_timer > self.hard_steer_threshold else "slight_left"
         elif actions.get("right") and self.steer_timer > self.slight_steer_threshold:
             sprite_name = "hard_right" if self.steer_timer > self.hard_steer_threshold else "slight_right"
         else:
             sprite_name = "straight"
-        
+
+        # Two-pass sizing: car should only shrink once it visually lifts off the
+        # screen bottom, not while it's still clamped there by a large sprite.
+        mid_h = self.game.map.mid_h
+        render_height = self.game.DISPLAY_H - mid_h
+        straight = self.raw_sprites["straight"]
+        straight_aspect = straight.get_width() / straight.get_height()
+        # k converts a road-width fraction (0..1 screen width) to sprite height
+        k = self.game.DISPLAY_W * 0.30 / straight_aspect
+
+        raw_draw_y = self.current_draw_y  # = base_y - forward_offset
+
+        # Pass 1: rough height from raw y
+        p1 = max(0.05, min(1.0, (raw_draw_y - mid_h) / render_height))
+        h1 = max(10, int((0.2 + p1 * 0.7) * k))
+
+        # Clamp with pass-1 height, then recompute perspective from clamped y
+        clamped_y = min(raw_draw_y, self.game.DISPLAY_H - h1)
+        p2 = max(0.05, min(1.0, (clamped_y - mid_h) / render_height))
+        current_h = max(10, int((0.2 + p2 * 0.7) * k))
+
         # Get scaled image for current frame
         self.image = self.get_current_scaled_image(sprite_name, current_h)
 
         # Track curvature difference is only for horizontal position on screen
         steer_diff = self.curvature - self.game.map.track_curvature
         self.position = steer_diff
-        
+
         # Centering logic
         img_w = self.image.get_width()
         img_h = self.image.get_height()
         self.position_int = self.game.DISPLAY_W / 2 + int(self.game.DISPLAY_W * self.position / 2) - (img_w // 2)
-        
-        # Vertical movement based on speed
-        forward_offset = int(self.speed * 44)
-        self.current_draw_y = self.base_y - forward_offset
-        
-        # HARD SCREEN BOUNDARY CLAMPING
-        # Prevents the car from ever disappearing horizontally or vertically
+
+        # Clamp both axes so car never disappears off screen
         self.position_int = max(0, min(self.position_int, self.game.DISPLAY_W - img_w))
-        self.current_draw_y = max(0, min(self.current_draw_y, self.game.DISPLAY_H - img_h))
+        self.current_draw_y = max(0, min(raw_draw_y, self.game.DISPLAY_H - img_h))
         
         # Draw dirt BEFORE car
         self.draw_dirt()

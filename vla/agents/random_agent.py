@@ -5,7 +5,7 @@ Random agent - selects actions uniformly at random from the discrete action spac
 import random
 from typing import Optional, Tuple, Any
 from vla.agents.agent import Agent
-from vla.env import Observation
+from vla.observation import Observation
 
 
 class RandomAgent(Agent):

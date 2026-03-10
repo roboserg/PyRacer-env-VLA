@@ -9,25 +9,11 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from PIL import Image
-from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Dict
 from data.gameFiles.game import Game
 from vla.agents.agent import Agent
 from vla.recorder import Recorder
-
-
-@dataclass
-class Observation:
-    """Represents a single observation from the game environment."""
-
-    frame: Any
-    speed: float
-    position: Any
-    car_x: float
-    car_y: float
-    map_obj: Any
-    on_road: bool
-    car_offset_from_center: float
+from vla.observation import Observation
 
 
 class GameEnvironment(gym.Env):

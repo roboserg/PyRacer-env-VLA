@@ -23,18 +23,30 @@ class Map:
         # Initialize persistent road details (blobs/grit)
         self.road_details = []
         for _ in range(60):
+            # Build an irregular blob from 4-8 overlapping sub-rects, stored in
+            # normalised coords relative to blob centre so we can scale by perspective
+            base_w = random.randint(10, 22)
+            base_h = random.randint(5, 12)
+            num_patches = random.randint(4, 8)
+            patches = []
+            for _ in range(num_patches):
+                dx = random.randint(-base_w // 2, base_w // 2)
+                dy = random.randint(-base_h // 2, base_h // 2)
+                pw = random.randint(base_w // 3, base_w)
+                ph = random.randint(base_h // 3, base_h)
+                patches.append((dx, dy, pw, ph))
             self.road_details.append({
-                "dist_idx": random.uniform(0, 100), 
+                "phase_offset": random.uniform(0, 80),
                 "offset": random.uniform(-0.8, 0.8),
-                "size_w": random.randint(2, 8),      
-                "size_h": random.randint(2, 5),      
-                "color": random.randint(50, 100)
+                "base_w": base_w,
+                "base_h": base_h,
+                "patches": patches,
+                "color": random.randint(50, 105)
             })
 
     def render(self):
         # self.update()
         self.draw_map()
-        self.draw_road_details()
 
     def update(self):
         # Update the car
@@ -70,8 +82,9 @@ class Map:
 
         bg_w = self.background_img.get_width()
         offset = int(self.bg_offset) % bg_w
-        self.game.display.blit(self.background_img, (-offset, 0))
-        self.game.display.blit(self.background_img, (bg_w - offset, 0))
+        # Raised background by 30px to match new horizon
+        self.game.display.blit(self.background_img, (-offset, -30))
+        self.game.display.blit(self.background_img, (bg_w - offset, -30))
 
         x, y = 0, 0
         # Draw the Entire map
@@ -117,18 +130,7 @@ class Map:
                 if x >= LeftGrass and x < LeftClip:
                     pygame.draw.rect(self.game.display, clip_color, (x, nRow, 8, 8))
                 if x >= LeftClip and x < RightClip:
-                    # Base road color
-                    road_color = (89, 89, 89)
-                    
-                    # Middle White Line
-                    center_x = int(midpoint * self.game.DISPLAY_W)
-                    line_w = 4 
-                    if abs(x - center_x) < line_w:
-                        dash_phase = 80 * math.pow(1 - perspective, 2) + self.car.distance * 0.5
-                        if math.sin(dash_phase * 0.2) > 0:
-                            road_color = (255, 255, 255)
-                            
-                    pygame.draw.rect(self.game.display, road_color, (x, nRow, 8, 8))
+                    pygame.draw.rect(self.game.display, (89, 89, 89), (x, nRow, 8, 8))
                 if x >= RightClip and x < RightGrass:
                     pygame.draw.rect(self.game.display, clip_color, (x, nRow, 8, 8))
                 if x >= RightGrass and x < self.game.DISPLAY_W:
@@ -136,29 +138,50 @@ class Map:
                 x += 8
             y += 8
 
+        # Draw road texture blobs (after road surface, before center line)
+        self.draw_road_details()
+
+        # Center line drawn last so it's always on top of blobs
+        for y in range(0, render_height, 8):
+            perspective = float(y / render_height)
+            midpoint = 0.5 + self.curvature * math.pow(1 - perspective, 3)
+            dash_phase = 80 * math.pow(1 - perspective, 2) + self.car.distance * 0.5
+            if math.sin(dash_phase * 0.2) > 0:
+                center_x = int(midpoint * self.game.DISPLAY_W)
+                pygame.draw.rect(self.game.display, (255, 255, 255), (center_x - 4, self.mid_h + y, 8, 8))
+
         # Draw the player's car
         self.car.draw()
         self.draw_stats()
 
     def draw_road_details(self):
-        """Draw persistent blobs that move and scale with EXACT road perspective"""
+        """Draw road texture blobs locked to the road using the same phase system as the center-line dashes."""
+        render_height = self.game.DISPLAY_H - self.mid_h
         for blob in self.road_details:
-            world_pos = (blob["dist_idx"] * 100.0 + self.car.distance * 0.5) % 100
-            p = world_pos / 100.0 
-            
-            if p > 0.05:
-                midpoint = 0.5 + self.curvature * math.pow(1 - (p * 0.56), 3)
-                # Match 0.7 width
-                road_w = 0.2 + (p * 0.56) * 0.7
-                
-                screen_y = self.mid_h + int(p * (self.game.DISPLAY_H - self.mid_h))
-                screen_x = int((midpoint + blob["offset"] * road_w * 0.5) * self.game.DISPLAY_W)
-                
-                w = max(1, int(blob["size_w"] * p))
-                h = max(1, int(blob["size_h"] * p))
-                
-                color = (blob["color"], blob["color"], blob["color"])
-                pygame.draw.rect(self.game.display, color, (screen_x, screen_y, w, h))
+            # Invert the dash-phase formula: 80*(1-perspective)^2 + distance*0.5 = phase_offset
+            # => perspective = 1 - sqrt(raw/80)  where raw = (phase_offset - distance*0.5) % 80
+            raw = (blob["phase_offset"] - self.car.distance * 0.5) % 80.0
+            perspective = 1.0 - math.sqrt(raw / 80.0)
+
+            if perspective < 0.05:
+                continue
+
+            # Exact same formulas as draw_map() so blobs sit on the road surface
+            midpoint = 0.5 + self.curvature * math.pow(1 - perspective, 3)
+            road_w = (0.2 + perspective * 0.7) * 0.5
+
+            screen_y = self.mid_h + int(perspective * render_height)
+            screen_x = int((midpoint + blob["offset"] * road_w * 0.5) * self.game.DISPLAY_W)
+
+            # Scale the pre-built irregular shape by perspective depth
+            scale = perspective
+            color = (blob["color"], blob["color"], blob["color"])
+            for dx, dy, pw, ph in blob["patches"]:
+                rx = screen_x + int(dx * scale)
+                ry = screen_y + int(dy * scale * 0.5)  # squash vertically for road angle
+                rw = max(1, int(pw * scale))
+                rh = max(1, int(ph * scale * 0.5))
+                pygame.draw.rect(self.game.display, color, (rx, ry, rw, rh))
 
     def draw_stats(self):
         speed_color = (255, 255, 255)

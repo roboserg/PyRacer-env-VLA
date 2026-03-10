@@ -1,17 +1,28 @@
 # PyRacer
-Short Retro Racing Game made with Pygame
 
-## Gameplay:
+Retro 3D-perspective racing game (Pygame) wrapped as a **Gymnasium environment** for RL and VLA (Vision-Language-Action) research.
 
-![start](https://github.com/ChristianD37/PyRacer/blob/main/gifs/start.gif)
-![lap](https://github.com/ChristianD37/PyRacer/blob/main/gifs/lap.gif)
+## Run
 
-## How to Play it yourself
+```bash
+python main.py                    # Human play
+python scripts/play.py            # Human play via gym env
+python scripts/record.py          # Record gameplay dataset
+python scripts/bot_play.py        # Rule-based bot
+python vla/train.py               # Train SmolVLM on recorded data
+```
 
-You can run the program by downlaoding all of the files and running the "game.py" file
+## Gym Interface
 
-## Credits:
+```python
+from vla.env import GameEnvironment
+env = GameEnvironment()
+obs, info = env.reset()
+obs, reward, terminated, truncated, info = env.step(action)  # action: 0-15 (4-bit flags)
+```
 
-Made by Christian Dueñas: http://www.youtube.com/channel/UCB2mKxxXPK3X8SJkAc-db3A
+Action bits: `accel=1, brake=2, left=4, right=8`
 
-Inspired by OneloneCoder's C++ tutorial: https://www.youtube.com/watch?v=KkMZI5Jbf18
+## Credits
+
+Originally by [Christian Dueñas](http://www.youtube.com/channel/UCB2mKxxXPK3X8SJkAc-db3A) — inspired by [OneloneCoder's C++ tutorial](https://www.youtube.com/watch?v=KkMZI5Jbf18).

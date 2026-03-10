@@ -60,9 +60,6 @@ def play(env: GameEnvironment, max_steps: int = 5000):
         # Render
         env.render()
 
-        if terminated or truncated:
-            break
-
         if step_count >= max_steps:
             print(f"\nMax steps reached ({max_steps})")
             break
