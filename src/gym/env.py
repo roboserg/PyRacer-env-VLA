@@ -41,6 +41,9 @@ class GameEnvironment(gym.Env):
         """Create observation object from current game state."""
         surface = self.game.display
         frame = Image.frombytes("RGB", surface.get_size(), pygame.image.tostring(surface, "RGB"))
+        # Crop to road: horizon line → bottom (removes sky/background)
+        horizon_y = self.game.map.mid_h
+        frame = frame.crop((0, horizon_y, frame.width, frame.height))
 
         car = self.game.map.car
         map_obj = self.game.map
