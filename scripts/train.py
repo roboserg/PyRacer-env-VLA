@@ -139,7 +139,7 @@ def main():
         per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
         learning_rate=5e-5,
-        num_train_epochs=3,
+        num_train_epochs=5,
         bf16=True,
         logging_first_step=True,
         logging_steps=2,

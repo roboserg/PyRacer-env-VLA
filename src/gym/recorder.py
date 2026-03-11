@@ -35,7 +35,7 @@ class Recorder:
             output_dir = DEFAULT_RECORDINGS_DIR
 
         self.enabled = enabled
-        self.frame_count = 0
+        self.recorded_count = 0
         self.metadata_entries = []
         self.last_annotation = ""
         self.last_obs = None
@@ -140,7 +140,7 @@ class Recorder:
         print(
             f"\n✓ Saved {len(self.metadata_entries)} metadata entries to {metadata_path}"
         )
-        print(f"✓ Total frames recorded: {self.frame_count}")
+        print(f"✓ Total frames recorded: {self.recorded_count}")
         print(f"✓ Dataset location: {self.output_dir}")
 
     def _generate_annotation(self, observation: Observation, action: dict) -> str:
@@ -272,7 +272,7 @@ class Recorder:
             parts.append("Recovering to track")
 
         # ===== STEERING CONSISTENCY =====
-        if self.last_obs and self.frame_count > 5:
+        if self.last_obs and self.recorded_count > 5:
             prev_left = getattr(self, "_last_steer_left", False)
             prev_right = getattr(self, "_last_steer_right", False)
             if left and prev_left:
