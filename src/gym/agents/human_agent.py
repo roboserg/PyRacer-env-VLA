@@ -5,7 +5,7 @@ Uses pygame.key.get_pressed() for non-blocking input.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Any, Dict
+from typing import Optional, Any, Dict
 import pygame
 from src.gym.agents.agent import Agent
 from src.gym.observation import Observation
@@ -17,19 +17,11 @@ class HumanAgent(Agent):
     def __init__(self, env: Optional[Any] = None):
         super().__init__(env)
 
-    def predict(
-        self,
-        observation: Observation,
-        state: Optional[Tuple[Any, ...]] = None,
-        episode_start: Optional[Any] = None,
-        deterministic: bool = False,
-    ) -> Tuple[Dict[str, bool], Optional[Tuple[Any, ...]]]:
+    def predict(self, observation: Observation) -> Dict[str, bool]:
         keys = pygame.key.get_pressed()
-        action = {
+        return {
             "accel": bool(keys[pygame.K_UP]),
             "brake": bool(keys[pygame.K_DOWN]),
             "left": bool(keys[pygame.K_LEFT]),
             "right": bool(keys[pygame.K_RIGHT]),
         }
-
-        return action, state

@@ -31,10 +31,9 @@ def main():
 
     try:
         env.reset()
-        state = None
         step = 0
         while True:
-            action, state = agent.predict(env.current_observation, state=state)
+            action = agent.predict(env.current_observation)
             _, reward, terminated, truncated, info = env.step(action)
             step += 1
             if terminated or truncated or info["should_quit"]:

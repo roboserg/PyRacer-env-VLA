@@ -3,7 +3,7 @@ Bot agent - simple rule-based agent that steers toward track center.
 Uses observation data to make decisions: stays on road, accelerates, steers by offset.
 """
 
-from typing import Optional, Tuple, Any, Dict
+from typing import Optional, Any, Dict
 from src.gym.agents.agent import Agent
 from src.gym.observation import Observation
 
@@ -26,13 +26,7 @@ class BotAgent(Agent):
     def __init__(self, env: Optional[Any] = None):
         super().__init__(env)
 
-    def predict(
-        self,
-        observation: Observation,
-        state: Optional[Tuple[Any, ...]] = None,
-        episode_start: Optional[Any] = None,
-        deterministic: bool = False,
-    ) -> Tuple[Dict[str, bool], Optional[Tuple[Any, ...]]]:
+    def predict(self, observation: Observation) -> Dict[str, bool]:
         offset = observation.car_offset_from_center
         speed = observation.speed
         on_road = observation.on_road
@@ -53,4 +47,4 @@ class BotAgent(Agent):
             brake = True
             accel = False
 
-        return {"accel": accel, "brake": brake, "left": left, "right": right}, state
+        return {"accel": accel, "brake": brake, "left": left, "right": right}

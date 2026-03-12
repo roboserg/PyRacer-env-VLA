@@ -3,7 +3,7 @@ Random agent - selects actions uniformly at random from the discrete action spac
 """
 
 import random
-from typing import Optional, Tuple, Any
+from typing import Optional, Any
 from src.gym.agents.agent import Agent
 from src.gym.observation import Observation
 
@@ -15,11 +15,5 @@ class RandomAgent(Agent):
         super().__init__(env)
         self.rng = random.Random(seed)
 
-    def predict(
-        self,
-        observation: Observation,
-        state: Optional[Tuple[Any, ...]] = None,
-        episode_start: Optional[Any] = None,
-        deterministic: bool = False,
-    ) -> Tuple[int, Optional[Tuple[Any, ...]]]:
-        return self.rng.randint(0, 15), state
+    def predict(self, observation: Observation) -> int:
+        return self.rng.randint(0, 15)

@@ -107,11 +107,21 @@ class Recorder:
         # Calculate timestamp relative to start of recording
         elapsed_time = time.time() - self.start_time
 
+        # Extract raw observation fields for richer augmentation context
+        curvature = None
+        try:
+            curvature = round(float(getattr(observation.map_obj, "curvature", 0) or 0), 4)
+        except Exception:
+            pass
+
         # Create metadata entry with timestamp
         entry = {
             "frame": frame_name,
             "timestamp": round(elapsed_time, 2),
             "speed": round(observation.speed, 2),
+            "car_offset": round(float(observation.car_offset_from_center), 1),
+            "on_road": bool(observation.on_road),
+            "curvature": curvature,
             "action": action_vector,
             "text": annotation,
         }

@@ -1,21 +1,14 @@
 import torch
 import json
-import random
-from PIL import Image, ImageOps
+from abc import ABC, abstractmethod
+from PIL import Image
 from torch.utils.data import Dataset
 from collections import Counter
 
-
-class RacingVLADataset(Dataset):
-    def __init__(self, jsonl_file, img_dir, processor, tokenizer, augment=True):
+class RacingDatasetBase(Dataset, ABC):
+    def __init__(self, jsonl_file, img_dir):
         self.data = [json.loads(line) for line in open(jsonl_file, "r")]
         self.img_dir = img_dir
-        self.processor = processor
-        self.tokenizer = tokenizer
-        self.augment = augment  # Enable flipping
-
-        # Mapping index to our special tokens
-        self.action_map = ["FWD", "BRK", "LFT", "RGT"]
 
     def __len__(self):
         return len(self.data)
@@ -24,8 +17,6 @@ class RacingVLADataset(Dataset):
         """Calculates and prints statistics for the current dataset instance."""
         print(f"Total dataset size: {len(self)} frames")
         stats = {"accel": 0, "brake": 0, "left": 0, "right": 0, "any_action": 0}
-
-        # Track unique action combinations
         action_sets = []
 
         for item in self.data:
@@ -40,10 +31,7 @@ class RacingVLADataset(Dataset):
                 stats["right"] += 1
             if any(v > 0.5 for v in a):
                 stats["any_action"] += 1
-
-            # Create a string representation for the action set
-            action_set_str = f"<FWD_{int(a[0]>0.5)}> <BRK_{int(a[1]>0.5)}> <LFT_{int(a[2]>0.5)}> <RGT_{int(a[3]>0.5)}>"
-            action_sets.append(action_set_str)
+            action_sets.append(self._encode_for_stats(a, item))
 
         print("\nDataset Individual Action Stats:")
         for k, v in stats.items():
@@ -57,46 +45,55 @@ class RacingVLADataset(Dataset):
             print(f"  {action_set}: {count:5} ({pct:.1f}%)")
         print()
 
+    @abstractmethod
+    def _encode_for_stats(self, actions, item) -> str:
+        pass
+
     def __getitem__(self, idx):
         item = self.data[idx]
         image = Image.open(f"{self.img_dir}/{item['frame']}").convert("RGB")
+        actions = list(item["action"])
 
-        # Pull values from JSON
-        actions = list(item["action"])  # [fwd, lft, rgt, brk]
-        thought_text = item.get("text", "Unknown state")
-        speed_val = item["speed"]
+        return self.build_sample(image, actions, item, idx)
 
-        # --- 1. DATA AUGMENTATION (FLIPPING) ---
-        do_flip = self.augment and random.random() > 0.5
-        if do_flip:
-            image = ImageOps.mirror(image)
-            # recorder.py order: [accel, brake, left, right]
-            # Swap Left (idx 2) and Right (idx 3)
-            actions[2], actions[3] = actions[3], actions[2]
+    @abstractmethod
+    def build_sample(self, image, actions, item, idx) -> dict:
+        """Return {pixel_values, input_ids, labels}."""
 
-            # Robust Text Swap using a dictionary
-            swap_map = {
-                "left": "right",
-                "right": "left",
-                "Left": "Right",
-                "Right": "Left",
-            }
-            # We use a regex or a simple split/join to avoid double-replacing
-            words = thought_text.split()
-            new_words = [swap_map.get(w.strip(",."), w) for w in words]
-            thought_text = " ".join(new_words)
 
-        # --- 2. TOKEN CONVERSION ---
-        # Note: Your action_map was ["FWD", "LFT", "RGT", "BRK"]
-        # Ensure this order matches your JSON action list index exactly!
-        action_tokens = []
-        for i, val in enumerate(actions):
-            state = "1" if val > 0.5 else "0"
-            action_tokens.append(f"<{self.action_map[i]}_{state}>")
-        action_str = " ".join(action_tokens)
+class VLADataset(RacingDatasetBase):
+    def __init__(self, jsonl_file, img_dir, processor, tokenizer, agent_cls=None):
+        super().__init__(jsonl_file, img_dir)
+        self.processor = processor
+        self.tokenizer = tokenizer
+        if agent_cls is None:
+            from src.vla.vla_agent import TwoTokenVLAAgent
+            agent_cls = TwoTokenVLAAgent
+        self.agent_cls = agent_cls
 
-        # --- 3. BUILD CONVERSATION (Annotation-grounded Action) ---
-        prompt_text_content = f"{thought_text} → Action:"
+    def _encode_for_stats(self, actions, item):
+        return self.agent_cls.encode_for_stats(actions, item)
+
+    def debug_sample(self, idx=0):
+        """Print a label X-ray for one sample to verify tokenisation before training."""
+        sample = self[idx]
+        labels = sample["labels"]
+        active_labels = labels[labels != -100]
+        item = self.data[idx]
+        action_str = self.agent_cls.encode_action(list(item["action"]), item)
+        print("\n" + "=" * 50)
+        print(f"[DEBUG] Action String:  {action_str}")
+        print(f"[DEBUG] Decoded Labels: {repr(self.tokenizer.decode(active_labels))}")
+        print(f"[DEBUG] Label IDs:      {active_labels.tolist()}")
+        print(f"[DEBUG] Prompt Len:     {(labels == -100).sum().item()}")
+        print(f"[DEBUG] Total Len:      {len(labels)}")
+        print("=" * 50 + "\n")
+
+    def build_sample(self, image, actions, item, idx):
+        action_str = self.agent_cls.encode_action(actions, item)
+        prompt_text_content = self.agent_cls.build_training_prompt(item)
+
+        # --- BUILD CONVERSATION ---
         messages = [
             {
                 "role": "user",
@@ -107,65 +104,40 @@ class RacingVLADataset(Dataset):
             },
             {
                 "role": "assistant",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": action_str,
-                    }
-                ],
+                "content": [{"type": "text", "text": action_str}],
             },
         ]
 
-        # --- 4. PROCESS FOR SMOLVLM ---
-        # 1. Get the prompt only (to find its length)
-        prompt_text = self.processor.apply_chat_template(
-            messages[:1], add_generation_prompt=True
-        )
+        # --- PROCESS FOR SMOLVLM ---
+        prompt_text = self.processor.apply_chat_template(messages[:1], add_generation_prompt=True)
         if not prompt_text.endswith(" "):
             prompt_text += " "
 
-        # 2. Get the full conversation
-        # We reconstruct it manually to ensure the space is handled correctly
         full_text = prompt_text + action_str + self.tokenizer.eos_token
 
-        # 3. Process both to ensure token alignment
         inputs = self.processor(
-            text=full_text,
-            images=image,
-            return_tensors="pt",
-            do_resize=True,
-            size={"longest_edge": 384},
+            text=full_text, images=image, return_tensors="pt",
+            do_resize=True, size={"longest_edge": 384},
         )
-
         prompt_inputs = self.processor(
-            text=prompt_text,
-            images=image,
-            return_tensors="pt",
-            do_resize=True,
-            size={"longest_edge": 384},
+            text=prompt_text, images=image, return_tensors="pt",
+            do_resize=True, size={"longest_edge": 384},
         )
 
         input_ids = inputs["input_ids"].squeeze(0)
         pixel_values = inputs["pixel_values"].squeeze(0)
         prompt_len = prompt_inputs["input_ids"].shape[1]
 
-        # --- 5. LABEL MASKING ---
+        # --- LABEL MASKING ---
         labels = input_ids.clone()
         labels[:prompt_len] = -100
-
-        # --- DEBUG X-RAY ---
-        if idx == 0:
-            active_labels = labels[labels != -100]
-            print(f"\n" + "=" * 50)
-            print(f"[DEBUG] Action String:  {action_str}")
-            print(f"[DEBUG] Decoded Labels: {repr(self.tokenizer.decode(active_labels))}")
-            print(f"[DEBUG] Label IDs:      {active_labels.tolist()}")
-            print(f"[DEBUG] Prompt Len:     {prompt_len}")
-            print(f"[DEBUG] Total Len:      {len(input_ids)}")
-            print("=" * 50 + "\n")
 
         return {
             "pixel_values": pixel_values.detach().clone().to(torch.float32),
             "input_ids": input_ids.detach().clone().to(torch.long),
             "labels": labels.detach().clone().to(torch.long),
         }
+
+
+TwoTokenDataset = VLADataset
+RacingVLADataset = VLADataset
