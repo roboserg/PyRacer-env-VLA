@@ -19,8 +19,6 @@ import pygame
 
 from src.gym.env import GameEnvironment
 from src.gym.recorder import Recorder
-from src.vla.model import get_model_and_processor
-from src.vla.vla_agent import AGENT_REGISTRY, TwoTokenVLAAgent
 from src.gym.agents.bot_agent import BotAgent
 
 
@@ -33,6 +31,11 @@ def main():
     parser.add_argument("--interval", type=int, default=None, help="Run VLA inference every N frames in blocking mode (default: non-blocking threaded inference)")
     parser.add_argument("--temperature", type=float, default=None, help="Sampling temperature for VLA inference (default: agent class default, e.g. 0.7 for CoT)")
     args = parser.parse_args()
+
+    # Conditionally import VLA modules only if not using bot
+    if not args.bot:
+        from src.vla.model import get_model_and_processor
+        from src.vla.vla_agent import AGENT_REGISTRY, TwoTokenVLAAgent
 
     if args.model_dir is None and not args.bot:
         runs = sorted(
