@@ -4,11 +4,11 @@ Eval script. Runs a bot or trained VLA model on the game.
 
 Usage:
     python scripts/eval.py                          # VLA agent, default model dir
-    python scripts/eval.py --agent bot              # rule-based bot baseline
-    python scripts/eval.py --agent bot --record     # bot play + record dataset
+    python scripts/eval.py --bot                    # rule-based bot baseline
+    python scripts/eval.py --bot --record           # bot play + record dataset
     python scripts/eval.py --model-dir models/foo   # specify model for VLA
     python scripts/eval.py --max-steps 1000
-    python scripts/eval.py --interval 6             # run VLA inference every Nth frame (default: 6)
+    python scripts/eval.py --interval 6             # blocking VLA inference every N frames (default: threaded/non-blocking)
 """
 
 import argparse
@@ -26,18 +26,15 @@ from src.gym.agents.bot_agent import BotAgent
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate an agent in PyRacer")
-    parser.add_argument("--agent", choices=["vla", "bot"], default=None, help="Agent type (default: vla)")
+    parser.add_argument("--bot", action="store_true", help="Run rule-based bot instead of VLA model")
     parser.add_argument("--model-dir", default=None, help="Model directory (VLA only, defaults to latest run in ./models)")
     parser.add_argument("--max-steps", type=int, default=None, help="Maximum number of steps")
     parser.add_argument("--record", action="store_true", help="Record gameplay to dataset")
-    parser.add_argument("--interval", type=int, default=1, help="Run VLA inference every N frames, holding last action in between (default: 1)")
+    parser.add_argument("--interval", type=int, default=None, help="Run VLA inference every N frames in blocking mode (default: non-blocking threaded inference)")
     parser.add_argument("--temperature", type=float, default=None, help="Sampling temperature for VLA inference (default: agent class default, e.g. 0.7 for CoT)")
     args = parser.parse_args()
 
-    if args.agent is None:
-        args.agent = "vla"
-
-    if args.model_dir is None:
+    if args.model_dir is None and not args.bot:
         runs = sorted(
             (d for d in os.listdir("./models") if os.path.isdir(os.path.join("./models", d))),
             reverse=True,
@@ -50,7 +47,7 @@ def main():
     pygame.display.init()
     pygame.font.init()
 
-    if args.agent == "vla":
+    if not args.bot:
         config_path = os.path.join(args.model_dir, "vla_config.json")
         if os.path.exists(config_path):
             with open(config_path) as f:
@@ -63,12 +60,13 @@ def main():
     else:
         agent = BotAgent()
 
-    recorder = Recorder(enabled=True, suffix=args.agent) if args.record else None
+    recorder = Recorder(enabled=True, suffix="bot" if args.bot else "vla") if args.record else None
     env = GameEnvironment(recorder=recorder)
 
-    interval = args.interval if args.agent == "vla" else 1
+    threaded = not args.bot and args.interval is None
+    interval = args.interval or 1
 
-    is_vla = args.agent == "vla"
+    is_vla = not args.bot
 
     try:
         env.reset()
@@ -79,7 +77,7 @@ def main():
         last_predict_time = time.perf_counter()
         game_fps = 0.0
         while True:
-            if is_vla:
+            if threaded:
                 if inferring:
                     result = agent.poll_predict()
                     if result is not None:
@@ -97,12 +95,21 @@ def main():
                             f" | A:{int(a.get('accel', False))} B:{int(a.get('brake', False))}"
                             f" L:{int(a.get('left', False))} R:{int(a.get('right', False))}"
                         )
-                elif step % interval == 0:
+                else:
                     agent.start_predict(env.current_observation)
                     inferring = True
             else:
                 if step % interval == 0:
                     action = agent.predict(env.current_observation)
+                    if is_vla:
+                        a = action if isinstance(action, dict) else {}
+                        print(
+                            f"frame:{step:>6} | game_fps:{game_fps:>5.1f}"
+                            f" | infer:{agent.last_inference_time_ms:>6.0f}ms"
+                            f" | {repr(agent.last_output_text)}"
+                            f" | A:{int(a.get('accel', False))} B:{int(a.get('brake', False))}"
+                            f" L:{int(a.get('left', False))} R:{int(a.get('right', False))}"
+                        )
 
             _, reward, terminated, truncated, info = env.step(action)
             now = time.perf_counter()

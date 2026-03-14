@@ -166,7 +166,14 @@ class CoTVLAAgent(VLAAgent):
         return throttle + steer
 
 
+class GRPOVLAAgent(CoTVLAAgent):
+    """CoT agent for GRPO/RL training. Generates thought traces + actions;
+    only the decoded actions are used for reward computation."""
+    pass
+
+
 AGENT_REGISTRY = {
     "TwoTokenVLAAgent": TwoTokenVLAAgent,
     "CoTVLAAgent": CoTVLAAgent,
+    "GRPOVLAAgent": GRPOVLAAgent,
 }
