@@ -1,11 +1,9 @@
 """
-GameEnvironment - Gymnasium wrapper for the PyRacer game.
-Manages game state and recording. Agent is external (SB3-style loop).
+GameEnvironment - Wrapper for the PyRacer game.
+Manages game state and recording. Agent is external.
 """
 
 import pygame
-import gymnasium as gym
-from gymnasium import spaces
 import numpy as np
 from PIL import Image
 from typing import Optional, Tuple
@@ -14,12 +12,10 @@ from src.gym.recorder import Recorder
 from src.gym.observation import Observation
 
 
-class GameEnvironment(gym.Env):
-    """Gymnasium environment wrapping the PyRacer game."""
+class GameEnvironment:
+    """Environment wrapping the PyRacer game."""
 
-    metadata = {"render_modes": ["human"]}
-
-    action_space = spaces.Discrete(16)
+    ACTION_SPACE_SIZE = 16
 
     def __init__(self, recorder: Optional[Recorder] = None):
         """
@@ -28,7 +24,6 @@ class GameEnvironment(gym.Env):
         Args:
             recorder: Optional Recorder instance for data collection
         """
-        super().__init__()
         self.game = Game()
         self.recorder = recorder
 
@@ -87,12 +82,8 @@ class GameEnvironment(gym.Env):
             action |= 8
         return action
 
-    def reset(
-        self, seed: Optional[int] = None, options: Optional[dict] = None
-    ) -> Tuple[Observation, dict]:
+    def reset(self) -> Tuple[Observation, dict]:
         """Reset the environment to initial state."""
-        super().reset(seed=seed)
-
         self.game.playing = True
         self.game.reset()
 
