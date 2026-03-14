@@ -1,6 +1,7 @@
 models/
-__pycache__/
 recordings/
+__pycache__/
 CLAUDE.md
 AGENTS.md
 GEMINI.md
+.venv*
