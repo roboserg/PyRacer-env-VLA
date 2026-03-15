@@ -1,6 +1,27 @@
 # PyRacer
 
-Retro 3D-perspective racing game (Pygame) wrapped as a Gymnasium environment for RL and VLA research.
+Retro 3D-perspective racing game (Pygame) wrapped as a gymnasium-inspired environment for RL and VLA research.
+
+![Trained VLA Agent](gifs/trained_VLA_agent.gif)
+
+## Overview
+
+PyRacer is a research environment for training vision-language-action (VLA) models to drive a retro racing game. The goal is to teach AI agents to drive by learning from human demonstrations and improving through reinforcement learning.
+
+**Pipeline:**
+1. **Data Collection**: Record human gameplay with keyboard controls, capturing frames + actions
+2. **SFT (Supervised Fine-Tuning)**: Train a SmolVLM model to imitate human driving behavior
+3. **GRPO (Group Relative Policy Optimization)**: Refine the model through RL to discover better strategies
+
+**VLA Architecture:**
+- Uses HuggingFace `SmolVLM-Instruct` as the base model
+- Implements **Chain-of-Thought (CoT)** reasoning: the model generates a reasoning trace before outputting actions
+- Special tokens encode actions: `<FWD_0>`, `<BRK_1>`, `<LEFT_2>`, `<RIGHT_3>`
+- Example model output: `<thought>Car is drifting left, need to steer right...</thought><action><FWD_1><RIGHT_3></action>`
+
+**Training Data:**
+- Saves frames (~10 FPS) and metadata to `recordings/YYYYMMDD_HHMMSS/`
+- Generates 20+ text annotations per frame (speed, position, on-road status, etc.)
 
 ## Run
 
@@ -8,16 +29,16 @@ Retro 3D-perspective racing game (Pygame) wrapped as a Gymnasium environment for
 python main.py                               # Human play with full menu system
 python scripts/play.py                       # Human play via VLA environment (no menus)
 python scripts/play.py --record              # Human play + record dataset
-python scripts/eval.py --agent bot           # Run rule-based bot
-python scripts/eval.py --agent vla           # Run trained VLA model
+python scripts/eval.py --bot                 # Run rule-based bot
+python scripts/eval.py                       # Run trained VLA model
 python scripts/train.py                      # Train VLA model on recorded data
-python scripts/train_rl.py                   # Train RL agent (GRPO, PPO, etc.)
+python scripts/train_rl.py                   # Train RL agent (GRPO)
 ```
 
-## Gym Interface
+## Gym-like Interface
 
 ```python
-from vla.env import GameEnvironment
+from src.gym.env import GameEnvironment
 env = GameEnvironment()
 obs, info = env.reset()
 obs, reward, terminated, truncated, info = env.step(action)  # action: 0-15 (4-bit flags)
@@ -29,9 +50,8 @@ Action bits: `accel=1, brake=2, left=4, right=8`
 
 - HumanAgent: Keyboard-controlled human player
 - BotAgent: Rule-based bot for baseline performance
-- RandomAgent: Random actions for exploration
 - VL-Agent: Uses trained SmolVLM model for vision-language action prediction
-- RL Agents: PPO, GRPO, etc. for reinforcement learning
+- RL Agents: GRPO for reinforcement learning
 
 ## Data Collection & Training
 
@@ -44,8 +64,8 @@ Action bits: `accel=1, brake=2, left=4, right=8`
    - Outputs to `models/` directory
 
 3. Train RL agents: `python scripts/train_rl.py`
-   - Supports GRPO (Group Relative Policy Optimization) and other RL algorithms
-   - Uses recorded datasets for offline RL or online training
+    - Implements GRPO (Group Relative Policy Optimization)
+    - Uses recorded datasets for offline RL or online training
 
 ## Credits
 
