@@ -213,6 +213,9 @@ class Map:
                 "FINISHED", 20, (255, 255, 255), self.mid_w - 10, self.mid_h
             )
 
+        # Draw VLA reasoning overlay
+        self.game.draw_overlay_text()
+
     def draw_action_arrows(self):
         base_x, base_y = 415, 10
         size = 15

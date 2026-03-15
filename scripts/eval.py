@@ -86,6 +86,7 @@ def main():
                     if result is not None:
                         action = result
                         inferring = False
+                        env.game.overlay_text = agent.last_output_text
                         now = time.perf_counter()
                         elapsed = now - last_predict_time
                         predict_fps = 1.0 / elapsed if step > 0 else 0.0
@@ -105,6 +106,7 @@ def main():
                 if step % interval == 0:
                     action = agent.predict(env.current_observation)
                     if is_vla:
+                        env.game.overlay_text = agent.last_output_text
                         a = action if isinstance(action, dict) else {}
                         print(
                             f"frame:{step:>6} | game_fps:{game_fps:>5.1f}"

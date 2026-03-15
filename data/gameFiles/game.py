@@ -33,6 +33,7 @@ class Game:
         self.dt = 0
         self.load_controls()
         self.load_images()
+        self.overlay_text = ""
 
         # Resets any logic that needs to be reset after every game loop
         # May include player, enemies, level, objects, etc
@@ -187,6 +188,30 @@ class Game:
         text_rect = text_surface.get_rect()
         text_rect.x, text_rect.y = x, y
         self.display.blit(text_surface, text_rect)
+
+    def draw_overlay_text(self):
+        """Draw VLA reasoning overlay above horizon, below time."""
+        if not self.overlay_text:
+            return
+        import re
+        m = re.search(r"<thought>(.*?)</thought>", self.overlay_text, re.DOTALL)
+        text = m.group(1).strip() if m else self.overlay_text
+        # Truncate to fit screen width (480px - 20px margins = 460px available)
+        font = self.font_cache.get(12) or pygame.font.Font(self.font_name, 12)
+        while len(text) > 0 and font.size(text)[0] > 460:
+            text = text[:-1]
+        if text and len(text) < len(m.group(1) if m else self.overlay_text):
+            text = text[:-3] + "..."
+        # Draw semi-transparent black background
+        text_surface = font.render(text, True, (255, 255, 255))
+        bg_rect = text_surface.get_rect(x=10, y=70)
+        bg_rect.inflate_ip(8, 4)
+        # Create semi-transparent background surface
+        bg_surface = pygame.Surface((bg_rect.width, bg_rect.height))
+        bg_surface.set_alpha(128)
+        bg_surface.fill((0, 0, 0))
+        self.display.blit(bg_surface, bg_rect.topleft)
+        self.display.blit(text_surface, (10, 70))
 
     def timer(self):
         self.total_time += self.dt
